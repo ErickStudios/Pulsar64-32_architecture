@@ -1,0 +1,208 @@
+$date
+	Sun May 03 09:48:07 2026
+$end
+$version
+	Icarus Verilog
+$end
+$timescale
+	1s
+$end
+$scope module tb $end
+$var reg 1 ! clk $end
+$var reg 1 " reset $end
+$scope module uut $end
+$var wire 1 ! clk $end
+$var wire 1 " reset $end
+$var wire 8 # PXB4 [7:0] $end
+$var wire 8 $ PXB3 [7:0] $end
+$var wire 8 % PXB2 [7:0] $end
+$var wire 8 & PXB1 [7:0] $end
+$var reg 8 ' OprOperationBytes [7:0] $end
+$var reg 8 ( OprOperator [7:0] $end
+$var reg 32 ) currentPtrAddrs [31:0] $end
+$var reg 8 * ir [7:0] $end
+$var reg 8 + mode [7:0] $end
+$var reg 8 , op_id [7:0] $end
+$var reg 8 - pc [7:0] $end
+$var reg 32 . sp [31:0] $end
+$var reg 8 / valueRegister [7:0] $end
+$upscope $end
+$upscope $end
+$enddefinitions $end
+#0
+$dumpvars
+bx /
+bx .
+bx -
+bx ,
+bx +
+bx *
+bx )
+bx (
+bx '
+bx &
+bx %
+bx $
+bx #
+1"
+0!
+$end
+#1
+b0 *
+b1111011000011000 .
+b0 -
+1!
+#2
+0!
+#3
+1!
+#4
+0!
+#5
+1!
+#6
+0!
+#7
+1!
+#8
+0!
+#9
+1!
+#10
+0!
+0"
+#11
+b1 -
+b1 *
+1!
+#12
+0!
+#13
+b100000 *
+b0 &
+b0 %
+b0 $
+b0 #
+b0 )
+b10 -
+b100000 +
+1!
+#14
+0!
+#15
+b11 -
+b0 *
+1!
+#16
+0!
+#17
+b100 -
+1!
+#18
+0!
+#19
+b101 -
+1!
+#20
+0!
+#21
+b110 -
+1!
+#22
+0!
+#23
+b111 -
+b10 *
+1!
+#24
+0!
+#25
+b1000 -
+b11111 *
+b1 /
+1!
+#26
+0!
+#27
+b1001 -
+b11 *
+1!
+#28
+0!
+#29
+b11111 *
+b1111011000010111 .
+b1010 -
+b11111 +
+1!
+#30
+0!
+#31
+b1011 -
+b1 *
+1!
+#32
+0!
+#33
+b11 *
+b1100 -
+b11 +
+1!
+#34
+0!
+#35
+b11111 *
+b1111011000010011 .
+b1101 -
+b11111 +
+1!
+#36
+0!
+#37
+b1110 -
+b0 *
+1!
+#38
+0!
+#39
+b1111 -
+b1 *
+1!
+#40
+0!
+#41
+b11010 *
+b1111011000001111 .
+b10000 -
+b11010 +
+1!
+#42
+0!
+#43
+b10001 -
+b10 *
+1!
+#44
+0!
+#45
+b10010 -
+b100 *
+1!
+#46
+0!
+#47
+b1 *
+b10011 -
+b100 '
+b1 (
+b1 ,
+1!
+#48
+0!
+#49
+b100 *
+b10100 -
+b100 +
+1!
+#50
+0!
