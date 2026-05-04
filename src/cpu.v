@@ -1,7 +1,15 @@
 module cpu(
-    input       clk,
-    input       reset
+    input           clk,
+    input           reset,
+    input           irq,
+    input [31:0]    irq_addr,
+    input [7:0]     irq_data,
+    output reg      irq_ack
 );
+
+reg [31:0]          vector_base;
+reg [31:0]          offset;
+reg [31:0]          irq_vector;
 
 // machine variables use for the runtime
 // def section
@@ -29,12 +37,39 @@ integer i;
 always @(posedge clk) begin
     // reset signal power on/restart computer
     if (reset) begin
-        pc = 0;
+        pc <= {
+            memory[0],
+            memory[1],
+            memory[2],
+            memory[3]
+        };
         sp = 63000;
         ir = 0;
         paused = 0;
     // tick of click
-    end else if (!paused) begin
+    end else begin
+        if (irq) begin
+            paused = 0;
+            irq_ack <= 1; 
+            sp = sp - 4;
+            memory[sp]     = pc[31:24];
+            memory[sp + 1] = pc[23:16];
+            memory[sp + 2] = pc[15:8];
+            memory[sp + 3] = pc[7:0];
+            valueRegister = irq_data;
+            vector_base = 3;
+            offset = irq_addr * 4;
+
+            irq_vector = {
+                memory[vector_base + offset + 3],
+                memory[vector_base + offset + 2],
+                memory[vector_base + offset + 1],
+                memory[vector_base + offset]
+            };
+            pc = irq_vector;
+        end else if (!paused) begin
+        irq_ack <= 0;
+
         // fetch instruction
         ir = memory[pc];                           // current instruction
         pc = pc + 1;                               // increment program counter
@@ -42,35 +77,15 @@ always @(posedge clk) begin
         case (ir)
             // LPX = Load Pointer eXpretion
             8'h01: begin
-                // fetch mode
                 mode = memory[pc];
-                pc = pc + 1;
-                // mode of operation
-                case (mode)
-                    // from inmediate
-                    8'h20: begin
-                        currentPtrAddrs = {
-                            memory      [pc],       // blk1
-                            memory      [pc+1],     // blk2
-                            memory      [pc+2],     // blk3
-                            memory      [pc+3]      // blk4
-                        };
-                        pc = pc + 4;                // increment pc
-                        $display("INM32      LPX 0x%x", currentPtrAddrs);
-                        pc = pc + 1;                // increment pc         
-                    end
-                    // from stack
-                    8'h1A: begin
-                        $display("STACK32    LPX");
-                        currentPtrAddrs = {
-                            memory      [sp],       // blk1
-                            memory      [sp+1],     // blk2
-                            memory      [sp+2],     // blk3
-                            memory      [sp+3]      // blk4
-                        };
-                         sp = sp + 4;               // increment pc 
-                    end
-                endcase
+                OprOperationBytes = memory[pc + 1];
+                pc = pc + 2;
+
+                a = operateInstant(mode[7:4],OprOperationBytes);
+
+                $display("ANONYMUS   LPX %0d", a);
+
+                currentPtrAddrs = a;
             end
             // LDX = Load From Memory To Data RegiXter (Data Register = valueRegister beta name)
             8'h02: begin
@@ -153,7 +168,6 @@ always @(posedge clk) begin
                     flags[1] = 1;
                 if (result > 0 && result[31] == 0)
                     flags[2] = 1;
-                $display(flags);
             end
             // JMP = Operation Propurse with Result
             8'h07: begin
@@ -173,7 +187,7 @@ always @(posedge clk) begin
                 $write("%s ", castToDebug(operationModes[3:0]));
 
                 a = operateInstant(operationModes[7:4],OprOperationBytes);
-                $write("%d\n", a);
+                $write("%0d\n", a);
                 case (mode)
                     // normal jmp 
                     8'h00: pc = a;
@@ -193,6 +207,7 @@ always @(posedge clk) begin
 
             end
         endcase
+    end
     end
 end
 

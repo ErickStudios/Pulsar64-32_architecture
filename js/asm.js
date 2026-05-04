@@ -155,11 +155,28 @@ export function AssembleLineWithoutContext(line, ctx) {
         if (casterA(operand1)) expect(',');
         casterA(operand2);
     }
+    function parseIdent(value) {
+        if (typeof value === 'number') return value;
+        else if (ctx.symbols.has(value)) return ctx.symbols.get(value);
+    }
     while (i < tokens.length) {
         if (peek().value.toUpperCase() === 'PUSH') {
             consume();
             expect('-');
             result.push(3);
+            let sizeof = parseSize(consume().value);
+            let expr = parsePrimary();
+            if (expr.type === 'inm') {
+                result.push(0, sizeof, ...toBigEndianBytes(expr.value, sizeof));
+            }
+            else if (expr.type == 'symbol') {
+                result.push(1, sizeof, parseSymbol(expr.value))
+            }
+        }
+        else if (peek().value.toUpperCase() === 'LEA') {
+            consume();
+            expect('-');
+            result.push(1);
             let sizeof = parseSize(consume().value);
             let expr = parsePrimary();
             if (expr.type === 'inm') {
@@ -247,7 +264,7 @@ export function AssembleLineWithoutContext(line, ctx) {
             }
             else if (parseSize(action.value.toUpperCase()) !== undefined) {
                 let sizeof = parseSize(action.value.toUpperCase());
-                result.push(...toBigEndianBytes(consume().value, sizeof));
+                result.push(...toBigEndianBytes(parseIdent(consume().value), sizeof));
             }
         }
         else if (peek().type === 'symbol' && peek().value === ';') break;
