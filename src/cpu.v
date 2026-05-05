@@ -57,14 +57,13 @@ always @(posedge clk) begin
             memory[sp + 2] = pc[15:8];
             memory[sp + 3] = pc[7:0];
             valueRegister = irq_data;
-            vector_base = 3;
+            vector_base = 4;
             offset = irq_addr * 4;
-
             irq_vector = {
-                memory[vector_base + offset + 3],
-                memory[vector_base + offset + 2],
+                memory[vector_base + offset],
                 memory[vector_base + offset + 1],
-                memory[vector_base + offset]
+                memory[vector_base + offset + 2],
+                memory[vector_base + offset + 3]
             };
             pc = irq_vector;
         end else if (!paused) begin
@@ -83,7 +82,12 @@ always @(posedge clk) begin
 
                 a = operateInstant(mode[7:4],OprOperationBytes);
 
-                $display("ANONYMUS   LPX %0d", a);
+                $write("ANONYMUS");
+                if ((OprOperationBytes * 8) < 10)
+                    $write("%0d ", OprOperationBytes * 8);
+                else
+                    $write("%0d", OprOperationBytes * 8);
+                $write(" LPX %0d\n", a);
 
                 currentPtrAddrs = a;
             end

@@ -12,37 +12,37 @@ wire [31:0] addr1, addr2, addr3, addr4;
 wire [7:0]  data1, data2, data3, data4;
 wire        irq_ack;
 wire        irq_ack1, irq_ack2, irq_ack3, irq_ack4;
-reg [7:0]   selectec_dev;
+reg  [7:0]  selectec_dev;
 
 // ================= CPU ASIGNATION IRQS =================
 reg         dev1_enable = 0;
 reg         dev2_enable = 0;
 reg         dev3_enable = 0;
 reg         dev4_enable = 0;
-reg [7:0]   dev1_data = 0;
-reg [7:0]   dev2_data = 0;
-reg [7:0]   dev3_data = 0;
-reg [7:0]   dev4_data = 0;
+reg  [7:0]  dev1_data = 0;
+reg  [7:0]  dev2_data = 0;
+reg  [7:0]  dev3_data = 0;
+reg  [7:0]  dev4_data = 0;
 
 // ================= CPU ASIGNATION IRQS =================
-assign  irq =       irq1 |
+assign      irq =   irq1 |
                     irq2 |
                     irq3 |
                     irq4;
-assign irq_addr =   (selectec_dev == 1) ? addr1 :
-                    (selectec_dev == 2) ? addr2 : 
-                    (selectec_dev == 3) ? addr3 : 
-                    (selectec_dev == 4) ? addr4 : 
-                    32'b0;
-assign irq_data =   (selectec_dev == 1) ? data1 :
-                    (selectec_dev == 2) ? data2 : 
-                    (selectec_dev == 3) ? data3 : 
-                    (selectec_dev == 4) ? data4 : 
-                    8'b0;
-assign irq_ack1 = irq_ack & (selectec_dev == 1);
-assign irq_ack2 = irq_ack & (selectec_dev == 2);
-assign irq_ack3 = irq_ack & (selectec_dev == 3);
-assign irq_ack4 = irq_ack & (selectec_dev == 4);
+assign      irq_addr =  (selectec_dev == 1) ? addr1 :
+                        (selectec_dev == 2) ? addr2 : 
+                        (selectec_dev == 3) ? addr3 : 
+                        (selectec_dev == 4) ? addr4 : 
+                        32'b0;
+assign      irq_data = (selectec_dev == 1) ? data1 :
+                       (selectec_dev == 2) ? data2 : 
+                       (selectec_dev == 3) ? data3 : 
+                       (selectec_dev == 4) ? data4 : 
+                       8'b0;
+assign      irq_ack1 = irq_ack & (selectec_dev == 1);
+assign      irq_ack2 = irq_ack & (selectec_dev == 2);
+assign      irq_ack3 = irq_ack & (selectec_dev == 3);
+assign      irq_ack4 = irq_ack & (selectec_dev == 4);
 
 // ================= CHIP BUS =================
 
@@ -118,15 +118,23 @@ initial begin
 
     #10 reset = 0;
     
-    #30 dev1_data = 8'd23;
+    #20 dev1_data = 8'd23;
     #1  dev1_enable = 1;
     #2  dev1_enable = 0;
 
-    #40 dev2_data = 8'd46;
+    #30 dev2_data = 8'd46;
     #1  dev2_enable = 1;
     #2  dev2_enable = 0;
 
-   // #100 $finish;
+    #40 dev3_data = 8'd46;
+    #1  dev3_enable = 1;
+    #2  dev3_enable = 0;
+
+    #50 dev4_data = 8'd46;
+    #1  dev4_enable = 1;
+    #2  dev4_enable = 0;
+
+    #100 $finish;
 end
 
 endmodule
