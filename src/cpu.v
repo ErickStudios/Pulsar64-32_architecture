@@ -102,7 +102,7 @@ always @(posedge clk) begin
                 OprOperationBytes = memory[pc + 1];
                 pc = pc + 2;
 
-                a = operateInstant(mode[7:4],OprOperationBytes);
+                a = operateInstant(mode[3:0],OprOperationBytes);
 
                 $display("ANONYMUS   PUS %0d", a);
 
@@ -129,8 +129,8 @@ always @(posedge clk) begin
                 $write("%s ", castToDebug(operationModes[7:4]));
                 $write("%s\n", castToDebug(operationModes[3:0]));
 
-                a = operateInstant(operationModes[7:4],OprOperationBytes);
-                b = operateInstant(operationModes[3:0],OprOperationBytes);
+                if (OprOperator != 8'h08) a = operateInstant(operationModes[7:4],OprOperationBytes);
+                if (OprOperator != 8'h08) b = operateInstant(operationModes[3:0],OprOperationBytes);
 
                 case (OprOperator) 
                     8'h01: result = a + b;
@@ -140,6 +140,10 @@ always @(posedge clk) begin
                     8'h05: result = a & b;
                     8'h06: result = a | b;
                     8'h07: result = a ^ b;
+                    // complex LDX
+                    8'h08: begin
+                        result = readINM(OprOperationBytes, currentPtrAddrs); 
+                    end
                 endcase
 
             end
@@ -193,7 +197,7 @@ always @(posedge clk) begin
 
                 $write("%s ", castToDebug(operationModes[3:0]));
 
-                a = operateInstant(operationModes[7:4],OprOperationBytes);
+                a = operateInstant(operationModes[3:0],OprOperationBytes);
                 $write("%0d\n", a);
                 case (mode)
                     // normal jmp 
@@ -219,7 +223,7 @@ always @(posedge clk) begin
                 OprOperationBytes = memory[pc + 1];
                 pc = pc + 2;
 
-                a = operateInstant(mode[7:4],OprOperationBytes);
+                a = operateInstant(mode[3:0],OprOperationBytes);
                 $write("ANONYMUS");
                 if ((OprOperationBytes * 8) < 10)
                     $write("%0d ", OprOperationBytes * 8);
@@ -228,7 +232,7 @@ always @(posedge clk) begin
                 $write(" SDX %0d\n", a);
 
                 for (i = 0; i < OprOperationBytes; i = i + 1) begin
-                    memory[OprOperationBytes + OprOperationBytes - i] = a >> (8*i);
+                    memory[currentPtrAddrs + i] = a >> (8*i);
                 end
             end
         endcase

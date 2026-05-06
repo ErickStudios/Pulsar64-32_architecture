@@ -11,15 +11,27 @@ _devices_vector:
         Assume-Dword up_button_irq
     _downBtn_vec_ptr:
         Assume-Dword down_button_irq 
+x:
+Assume-Byte 0
+y:
+Assume-Byte 0
+z:
+Assume-Byte 0
+_start:
 _init:
-    Lea-Dword       _alphaBtn_vec_ptr
-    Out-Dword       alpha_button_irq
-    Lea-Dword       _betaBtn_vec_ptr
-    Out-Dword       beta_button_irq
-    Lea-Dword       _upBtn_vec_ptr
-    Out-Dword       up_button_irq
-    Lea-Dword       _downBtn_vec_ptr
-    Out-Dword       down_button_irq
+    Lea-Dword x
+    Out-Byte 2
+    Lea-Dword y
+    Out-Byte 3
+    Lea-Dword y
+    Mov-Byte
+    Push-Byte Out
+    Lea-Dword x
+    Mov-Byte
+    Push-Byte Out
+    Add-Byte-Sp-Sp
+    Lea-Dword z
+    Out-Byte Out
 loop:
     Hlt
     Jmp-Word-Clasic loop

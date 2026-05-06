@@ -204,6 +204,14 @@ export function AssembleLineWithoutContext(line, ctx) {
         result.push(1, sizeof, parseSymbol(expr.value))
       }
     }
+    else if (peek().value.toUpperCase() === 'MOV') {
+      consume();
+      result.push(4);
+      result.push(8);
+      expect('-');
+      let sizeof = parseSize(consume().value);
+      result.push(sizeof, 0);
+    }
     else if (peek().value.toUpperCase() === 'HLT') {
       consume();
       result.push(5);

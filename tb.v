@@ -118,6 +118,7 @@ initial begin
 
     #10 reset = 0;
     
+    /**
     #20 dev1_data = 8'd23;
     #1  dev1_enable = 1;
     #2  dev1_enable = 0;
@@ -133,6 +134,7 @@ initial begin
     #50 dev4_data = 8'd46;
     #1  dev4_enable = 1;
     #2  dev4_enable = 0;
+    */
 
     #100 $finish;
 end
