@@ -112,7 +112,7 @@ end
 
 initial begin
     $display("pulsar5024XM_x32 chip debug");
-    $readmemh("program.hex", uut.memory);
+    $readmemh("program.hex", uut.cpg.memory);
     //$dumpfile("wave.vcd");
     //$dumpvars(0, tb);
 

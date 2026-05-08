@@ -11,13 +11,13 @@ function [31:0] operateInstant; input [3:0] modeOpr; input [7:0] bytesLen; begin
             pc = pc + bytesLen;
         end
         4'h1: begin
-            a = memory[pc];
+            gr.a = memory[pc];
             pc = pc + 1;
 
-            case (a)
-                0: operateInstant = result;
-                1: operateInstant = valueRegister;
-                2: operateInstant = currentPtrAddrs;
+            case (gr.a)
+                0: operateInstant = gr.result;
+                1: operateInstant = gr.valueRegister;
+                2: operateInstant = gr.currentPtrAddrs;
                 default: operateInstant = 0;
             endcase
         end

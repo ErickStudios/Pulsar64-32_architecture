@@ -23,7 +23,7 @@ cpu uut(
 
 initial begin
     $display("pulsar5024XM_x32 chip debug");
-    $readmemh("program.hex", uut.memory);
+    $readmemh("program.hex", uut.cpg.memory);
 
     #10 reset = 0;
 
