@@ -65,6 +65,38 @@ reg  [7:0]      mode;                               // mode of the operation
 reg  [7:0]      operationModes;                     // operation mode
 reg  [7:0]      flags;                              // the flags of the cpu
 endmodule
+module cpuv();
+reg [31:0]          vector_base;
+reg [31:0]          offset;
+reg [31:0]          irq_vector;
+endmodule
+module alu(
+    input       [7:0]   opcode,
+    input       [31:0]  a,
+    input       [31:0]  b,
+    input               aluActive,
+    input               clk
+);
+
+//reg                     aluActive;
+reg [31:0]              result;
+
+always @(posedge clk) begin
+    if (aluActive == 1) begin
+        case(opcode)
+            8'h01: result = a + b;
+            8'h02: result = a - b;
+            8'h03: result = a * b;
+            8'h04: result = a / b;
+            8'h05: result = a & b;
+            8'h06: result = a | b;
+            8'h07: result = a ^ b;
+            default: result = 0;
+        endcase
+    end
+end
+
+endmodule
 module cpu(
     input           clk,
     input           reset,
@@ -74,19 +106,26 @@ module cpu(
     output reg      irq_ack
 );
 
-reg [31:0]          vector_base;
-reg [31:0]          offset;
-reg [31:0]          irq_vector;
+// ============== cpu components ==============
+cpug                cpg();
+cpum                cpm();
+generalRegisters    gr();
+cpuv                cpv();
 
-// machine variables use for the runtime
-// def section
+// ============== alu components ==============
+reg  [31:0]         aluA;
+reg  [31:0]         aluB;
+reg                 aluPending;
+reg                 aluActive;
 
-// ============== cpu mangment ==============
-cpug cpg();
-// ============== modes ==============
-cpum cpm();
-// ============== general registers ==============
-generalRegisters gr();
+alu                 alu0(
+    .opcode         (gr.OprOperator),
+    .a              (aluA),
+    .b              (aluB),
+    .aluActive      (aluActive),
+    .clk            (clk)
+);
+
 // ============== temporaly ==============
 `define         STR_INM  "INM     "                 // operation cpm.mode
 `define         STR_REG  "REGISTER"                 // register cpm.mode
@@ -176,6 +215,13 @@ always @(posedge clk) begin
         cpm.paused = 0;
     // tick of click
     end else begin
+        // alu disabling
+        if (aluPending) begin 
+            gr.result = alu0.result;
+            aluActive = 0;
+            aluPending = 0;
+        end
+
         if (irq) begin
             cpm.paused = 0;
             irq_ack <= 1; 
@@ -185,15 +231,15 @@ always @(posedge clk) begin
             cpg.memory[cpg.sp + 2] = cpg.pc[15:8];
             cpg.memory[cpg.sp + 3] = cpg.pc[7:0];
             gr.valueRegister = irq_data;
-            vector_base = 4;
-            offset = irq_addr * 4;
-            irq_vector = {
-                cpg.memory[vector_base + offset],
-                cpg.memory[vector_base + offset + 1],
-                cpg.memory[vector_base + offset + 2],
-                cpg.memory[vector_base + offset + 3]
+            cpv.vector_base = 4;
+            cpv.offset = irq_addr * 4;
+            cpv.irq_vector = {
+                cpg.memory[cpv.vector_base + cpv.offset],
+                cpg.memory[cpv.vector_base + cpv.offset + 1],
+                cpg.memory[cpv.vector_base + cpv.offset + 2],
+                cpg.memory[cpv.vector_base + cpv.offset + 3]
             };
-            cpg.pc = irq_vector;
+            cpg.pc = cpv.irq_vector;
         end else if (!cpm.paused) begin
         irq_ack <= 0;
 
@@ -261,16 +307,14 @@ always @(posedge clk) begin
                 if (gr.OprOperator != 8'h08) gr.b = operateInstant(cpm.operationModes[3:0],gr.OprOperationBytes);
 
                 case (gr.OprOperator) 
-                    8'h01: gr.result = gr.a + gr.b;
-                    8'h02: gr.result = gr.a - gr.b;
-                    8'h03: gr.result = gr.a * gr.b;
-                    8'h04: gr.result = gr.a / gr.b;
-                    8'h05: gr.result = gr.a & gr.b;
-                    8'h06: gr.result = gr.a | gr.b;
-                    8'h07: gr.result = gr.a ^ gr.b;
-                    // complex LDX
                     8'h08: begin
                         gr.result = readINM(gr.OprOperationBytes, gr.currentPtrAddrs); 
+                    end
+                    default: begin
+                        aluPending = 1;
+                        aluA = gr.a;
+                        aluB = gr.b;
+                        aluActive = 1;
                     end
                 endcase
 
