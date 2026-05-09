@@ -3,10 +3,9 @@ module alu(
     input       [31:0]  a,
     input       [31:0]  b,
     input               aluActive,
-    input               clk
+    input               clk,
+    output reg  [31:0]  result
 );
-
-reg [31:0]              result;
 
 always @(posedge clk) begin
     if (aluActive == 1) begin

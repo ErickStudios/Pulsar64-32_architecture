@@ -75,11 +75,9 @@ module alu(
     input       [31:0]  a,
     input       [31:0]  b,
     input               aluActive,
-    input               clk
+    input               clk,
+    output reg  [31:0]  result
 );
-
-//reg                     aluActive;
-reg [31:0]              result;
 
 always @(posedge clk) begin
     if (aluActive == 1) begin
@@ -115,7 +113,8 @@ cpuv                cpv();
 // ============== alu components ==============
 reg  [31:0]         aluA;
 reg  [31:0]         aluB;
-reg                 aluPending;
+wire [31:0]         aluResult;
+reg  [1:0]          aluState;
 reg                 aluActive;
 
 alu                 alu0(
@@ -123,7 +122,8 @@ alu                 alu0(
     .a              (aluA),
     .b              (aluB),
     .aluActive      (aluActive),
-    .clk            (clk)
+    .clk            (clk),
+    .result         (aluResult)
 );
 
 // ============== temporaly ==============
@@ -213,13 +213,20 @@ always @(posedge clk) begin
         cpg.sp = 63000;
         cpm.ir = 0;
         cpm.paused = 0;
+        
+        aluActive <= 0;
+        aluA <= 0;
+        aluB <= 0;
     // tick of click
     end else begin
         // alu disabling
-        if (aluPending) begin 
-            gr.result = alu0.result;
+        if (aluState == 1) begin
+            aluState = 2;
+        end
+        else if (aluState == 2) begin
+            gr.result = aluResult;
             aluActive = 0;
-            aluPending = 0;
+            aluState = 0;
         end
 
         if (irq) begin
@@ -311,10 +318,10 @@ always @(posedge clk) begin
                         gr.result = readINM(gr.OprOperationBytes, gr.currentPtrAddrs); 
                     end
                     default: begin
-                        aluPending = 1;
-                        aluA = gr.a;
-                        aluB = gr.b;
-                        aluActive = 1;
+                        aluA <= gr.a;
+                        aluB <= gr.b;
+                        aluActive <= 1;
+                        aluState <= 1;
                     end
                 endcase
 
