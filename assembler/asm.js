@@ -47,6 +47,14 @@ export function tokenize(code) {
       while (i < code.length && isNumber(code[i])) {
         value += code[i++];
       }
+      if (value == "0" && code[i] === "x") {
+        i++;
+        let value2 = "";
+        while (i < code.length && (isNumber(code[i]) || ['A','B','C','D','E','F'].includes(code[i].toUpperCase()))) {
+          value2 += code[i++];
+        }
+        value = parseInt(value2, 16);
+      }
       tokens.push({ type: "number", value: Number(value) });
       continue;
     }
@@ -67,7 +75,10 @@ export function toBigEndianBytes(n, x) {
   }
   return bytes;
 }
-export function AssembleLineWithoutContext(line, ctx) {
+export function AssembleLineWithoutContext(line, ctx, len=null) {
+  if (len == null) {
+    len = ctx.codelen;
+  }
   let tokens = tokenize(line);
   let i = 0;
   let result = [];
@@ -298,6 +309,11 @@ export function AssembleLineWithoutContext(line, ctx) {
         let sizeof = parseSize(action.value.toUpperCase());
         result.push(...toBigEndianBytes(parseIdent(consume().value), sizeof));
       }
+      else if (action.value.toUpperCase() === "FILL") {
+        let fillto = consume().value;
+        let bytesfill = fillto - len;
+        result.push(...Array(bytesfill).fill(1));
+      }
     }
     else if (peek().type === 'symbol' && peek().value === ';') break;
     else if (peek().type === 'identifier' && typeof peek().value === 'string') {
@@ -322,9 +338,11 @@ export function AssembleCode(code) {
     context.codelen += lineAssembled.length;
   })
   context.passDefedNot = true;
+  let len = 0;
   lines.forEach((line) => {
-    let lineAssembled = AssembleLineWithoutContext(line, context);
+    let lineAssembled = AssembleLineWithoutContext(line, context,len);
     result.push(...lineAssembled);
+    len += lineAssembled.length;
   })
   return { result, context };
 }

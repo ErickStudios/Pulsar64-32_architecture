@@ -47,3 +47,5 @@ up_button_irq:
 down_button_irq:
     Lea-Dword 40
     Jmp-Word-Clasic loop
+end:
+Assume-Fill 0xFFF
