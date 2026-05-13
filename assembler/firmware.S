@@ -32,12 +32,51 @@ _init:
     Add-Byte-Sp-Sp
     Lea-Dword z
     Out-Byte Out
-    Lea-Dword serial_char_send
-    Out-Byte 0
-    Out-Byte 'x'
+
+    Jmp-Dword-Call  fixSerial
+    Lea-Dword       bootmsg
+    Jmp-Dword-Call  put_msg
+
 loop:
     Hlt
     Jmp-Word-Clasic loop
+
+fixSerial:
+    Add-Byte-Inm-Inm ' ', 0
+    Jmp-Word-Clasic put_char
+
+; ================= funcs =================
+
+; put a character
+put_char:
+    Push-Dword      Px
+    Lea-Dword       serial_char_send
+    Out-Byte        0
+    Out-Byte        Out
+    Lea-Dword       Sp
+    Jmp-Dword-Clasic Sp
+
+put_msg:
+    Push-Dword      Px
+put_msg_loop:
+    Mov-Byte
+    Push-Byte       Out
+    Cmp-Byte-Inm-Sp 0
+    Mov-Byte
+    Jmp-Word-Zero   put_msg_end
+    Jmp-Dword-Call  put_char
+    Push-Dword      Px
+    Add-Dword-Sp-Inm 1
+    Lea-Dword       Out
+    Jmp-Dword-Clasic put_msg_loop
+put_msg_end:
+    Lea-Dword       Sp
+    Jmp-Dword-Clasic Sp
+
+
+; ================= irqs =================
+; the irqs
+
 alpha_button_irq:
     Push-Dword      Px
     Lea-Dword       25
@@ -73,3 +112,6 @@ serial_port_cmd:
 ; serial status
 serial_port_status:
     Assume-Byte     3
+
+bootmsg:
+    Assume-Byte     'b', 'o', 'o', 't', 'i', 'n', 'g', ' ', 'f', 'r', 'o',  'm', ' ', 'R', 'O', 'M', 10, 0

@@ -118,6 +118,7 @@ always @(posedge clk) begin
         cpm.ir = 0;
         cpm.paused = 0;
         
+        aluState <= 0;
         aluActive <= 0;
         aluA <= 0;
         aluB <= 0;
@@ -134,6 +135,7 @@ always @(posedge clk) begin
         end
 
         if (irq && !irq_ack) begin
+            if (!quiet) $write("%d (%8x) ",cpg.pc - 1, cpg.pc);
             if (!quiet) $display("HARDWARE   IRQ %0d %0d", irq_addr, irq_data);
             cpm.paused = 0;
             irq_ack <= 1; 
@@ -152,13 +154,14 @@ always @(posedge clk) begin
                 cpg.memory[cpv.vector_base + cpv.offset + 3]
             };
             cpg.pc = cpv.irq_vector;
-        end else if (!cpm.paused) begin
+        end else if (!cpm.paused && !aluState) begin
         irq_ack <= 0;
 
         // fetch instruction
         cpm.ir = cpg.memory[cpg.pc];                           // current instruction
         cpg.pc = cpg.pc + 1;                               // increment program counter
 
+        if (!quiet) $write("%d (%8x) ",cpg.pc - 1, cpg.pc);
         case (cpm.ir)
             // LPX = Load Pointer eXpretion
             8'h01: begin
@@ -227,10 +230,10 @@ always @(posedge clk) begin
                         gr.result = readINM(gr.OprOperationBytes, gr.currentPtrAddrs); 
                     end
                     default: begin
-                        aluA <= gr.a;
-                        aluB <= gr.b;
-                        aluActive <= 1;
-                        aluState <= 1;
+                        aluA = gr.a;
+                        aluB = gr.b;
+                        aluActive = 1;
+                        aluState = 1;
                     end
                 endcase
 
@@ -305,6 +308,15 @@ always @(posedge clk) begin
                     // if greater jmp
                     8'h03: begin 
                         if (cpm.flags[2]) cpg.pc = gr.a;
+                    end
+                    // call
+                    8'h04: begin 
+                        cpg.sp = cpg.sp - 4;
+                        cpg.memory[cpg.sp]     = cpg.pc[31:24];
+                        cpg.memory[cpg.sp + 1] = cpg.pc[23:16];
+                        cpg.memory[cpg.sp + 2] = cpg.pc[15:8];
+                        cpg.memory[cpg.sp + 3] = cpg.pc[7:0];
+                        cpg.pc = gr.a;
                     end
                 endcase
 

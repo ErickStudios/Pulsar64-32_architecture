@@ -122,6 +122,7 @@ export function AssembleLineWithoutContext(line, ctx, len=null) {
       if (ctx.symbols.has(ident.value)) {
         return ({ type: 'inm', value: ctx.symbols.get(ident.value) + ctx.orgIn });
       }
+      return ({ type: 'inm', value: 0 });
     }
     if (ctx.symbols.has(ident.value)) {
       return ({ type: 'inm', value: ctx.symbols.get(ident.value) + ctx.orgIn });
@@ -178,6 +179,7 @@ export function AssembleLineWithoutContext(line, ctx, len=null) {
   function parseIdent(value) {
     if (typeof value === 'number') return value;
     else if (ctx.symbols.has(value)) return ctx.symbols.get(value);
+    return 0;
   }
   while (i < tokens.length) {
     if (peek().value.toUpperCase() === 'PUSH') {
@@ -260,8 +262,8 @@ export function AssembleLineWithoutContext(line, ctx, len=null) {
         }
         return false;
       }
-      if (casterA(operand1)) expect(',');
-      casterA(operand2);
+      casterA(operand1);
+       if (casterA(operand2)) expect(',');
     }
     else if (peek().value.toUpperCase() === "JMP") {
       consume();
@@ -293,6 +295,9 @@ export function AssembleLineWithoutContext(line, ctx, len=null) {
       else if (mode.toUpperCase() === 'GREATER') {
         result.push(3);
       }
+      else if (mode.toUpperCase() === 'CALL') {
+        result.push(4);
+      }
       if (expr.type === 'inm') {
         result.push(...toBigEndianBytes(expr.value, sizeof));
       }
@@ -317,7 +322,14 @@ export function AssembleLineWithoutContext(line, ctx, len=null) {
       }
       else if (parseSize(action.value.toUpperCase()) !== undefined) {
         let sizeof = parseSize(action.value.toUpperCase());
-        result.push(...toBigEndianBytes(parseIdent(parsePrimary().value), sizeof));
+        let primarys = toBigEndianBytes(parseIdent(parsePrimary().value),sizeof);
+        while (peek() && peek().value === ",") {
+          consume();
+          primarys.push(...toBigEndianBytes(
+            parseIdent(parsePrimary().value),sizeof
+          ));
+        }
+        result.push(...primarys);
       }
       else if (action.value.toUpperCase() === "FILL") {
         let fillto = consume().value;
