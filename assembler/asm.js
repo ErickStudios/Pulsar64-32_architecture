@@ -344,7 +344,12 @@ export function AssembleLineWithoutContext(line, ctx, len=null) {
         consume();
         if (!('passDefedNot' in ctx)) ctx.symbols.set(varName, ctx.codelen);
         continue;
-      } else {
+      } else if (peek().value.toUpperCase() === 'EQU') {
+        consume();
+        let v = consume().value;
+        if (!('passDefedNot' in ctx)) ctx.symbols.set(varName, v);
+        continue;
+      }else {
         throw new Error("Unexpected identifier: " + varName);
       }
     }

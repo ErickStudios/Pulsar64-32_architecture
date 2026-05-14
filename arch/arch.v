@@ -242,7 +242,7 @@ always @(posedge clk) begin
             8'h05: begin 
                 cpm.paused = 1;
             end
-            // CMP = Operation Propurse with Result
+            // CMP = Compare Multi Parse
             8'h06: begin
                 // fetch cpm.mode
                 gr.OprOperationBytes = cpg.memory[cpg.pc]; // operation bytes len
@@ -273,7 +273,7 @@ always @(posedge clk) begin
                 if (gr.result > 0 && gr.result[31] == 0)
                     cpm.flags[2] = 1;
             end
-            // JMP = Operation Propurse with Result
+            // JMP = Jump Multi Templates
             8'h07: begin
                 // fetch cpm.mode
                 gr.OprOperationBytes = cpg.memory[cpg.pc];     // operation bytes len
@@ -344,6 +344,7 @@ always @(posedge clk) begin
         endcase
     end
     end
+    $fflush();
 end
 
 endmodule

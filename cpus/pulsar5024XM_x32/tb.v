@@ -26,6 +26,9 @@ reg  [7:0]  dev4_data = 0;
 
 // ================= SERIAL COM1 PORT =================
 reg         com1_rdnxtch = 0;
+reg  [7:0]  com1_mode = 0;
+reg  [7:0]  com1_next_cmd = 0;
+reg         com1_next_char_is_cmd = 0;
 
 // ================= CPU ASIGNATION IRQS =================
 assign      irq =   irq1 |
@@ -101,12 +104,34 @@ device #(.BASE_ADDR(32'h3)) downButton(
 );
 
 always @(posedge clk) begin
+    // reseteo del puerto serial
+    if (reset) begin
+        com1_next_cmd = 8'hFF;
+        com1_next_char_is_cmd = 0;
+        com1_mode = 8'hFF;
+        com1_rdnxtch = 0;
+    end
+
+    // mandar comandos al com1
+    if (uut.cpg.memory[4096] != 0) begin
+        com1_next_cmd = uut.cpg.memory[4096];
+        uut.cpg.memory[4096] = 0;
+        com1_next_char_is_cmd = 1;
+    end
+
     if (uut.cpg.memory[4095] == 0) begin 
         com1_rdnxtch <= 1;
     end
+    
     else if (uut.cpg.memory[4095] != 0 && com1_rdnxtch) begin
         com1_rdnxtch <= 0;
-        $write("%c", uut.cpg.memory[4095]);
+        if (com1_next_char_is_cmd && com1_next_cmd == 8'h01) begin
+            com1_mode = uut.cpg.memory[4095];
+            com1_next_char_is_cmd = 0;
+        end
+        else begin 
+            if (com1_mode == 1) $write("%c", uut.cpg.memory[4095]);
+        end
         uut.cpg.memory[4095] <= 0;
     end
     if (irq1) 

@@ -1,5 +1,7 @@
 Assume-Org          0
 
+SERIAL_MODE_SWITCH  Equ  0x01
+
 _reset_vector:
     Assume-Dword    _init
 _devices_vector:
@@ -11,32 +13,22 @@ _devices_vector:
         Assume-Dword up_button_irq
     _downBtn_vec_ptr:
         Assume-Dword down_button_irq 
-x:
-Assume-Byte 0
-y:
-Assume-Byte 0
-z:
-Assume-Byte 0
-_start:
 _init:
-    Lea-Dword x
-    Out-Byte 2
-    Lea-Dword y
-    Out-Byte 3
-    Lea-Dword y
-    Mov-Byte
-    Push-Byte Out
-    Lea-Dword x
-    Mov-Byte
-    Push-Byte Out
-    Add-Byte-Sp-Sp
-    Lea-Dword z
-    Out-Byte Out
+    ; inicializar la consola serial
+    Lea-Dword       serial_port_cmd
+    Out-Byte        SERIAL_MODE_SWITCH
+                              ; no esta lista la consola serial o cuando la apagas o
+                              ; depues de un comando entonces haces que el proximo
+                              ; byte que envies sea el parametro con el que enviaste 
+                              ; el comando
+    Add-Byte-Inm-Inm 1, 0     ; el modo de limpiar com1 y por ahora directamente 
+                              ; le puedes poner el modo de print out
+    Jmp-Word-Call   put_char  ; mandrlo
+    Jmp-Dword-Call  fixSerial ; si no lo sabian si mandas un caracter en estado cuando
 
     Jmp-Dword-Call  fixSerial
     Lea-Dword       bootmsg
     Jmp-Dword-Call  put_msg
-
 loop:
     Hlt
     Jmp-Word-Clasic loop
@@ -105,13 +97,13 @@ Assume-Fill         0xFFF
 
 ; send char
 serial_char_send:
-    Assume-Byte     1
+    Assume-Byte     0
 ; command sender
 serial_port_cmd:
-    Assume-Byte     2
+    Assume-Byte     0
 ; serial status
 serial_port_status:
-    Assume-Byte     3
+    Assume-Byte     0
 
 bootmsg:
     Assume-Byte     'b', 'o', 'o', 't', 'i', 'n', 'g', ' ', 'f', 'r', 'o',  'm', ' ', 'R', 'O', 'M', 10, 0
