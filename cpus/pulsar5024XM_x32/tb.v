@@ -7,11 +7,11 @@ always #1   clk = ~clk;
 wire        irq;
 wire [31:0] irq_addr;
 wire [7:0]  irq_data;
-wire        irq1, irq2, irq3, irq4;
-wire [31:0] addr1, addr2, addr3, addr4;
-wire [7:0]  data1, data2, data3, data4;
+wire        irq1, irq2, irq3, irq4, irq5;
+wire [31:0] addr1, addr2, addr3, addr4, addr5;
+wire [7:0]  data1, data2, data3, data4, data5;
 wire        irq_ack;
-wire        irq_ack1, irq_ack2, irq_ack3, irq_ack4;
+wire        irq_ack1, irq_ack2, irq_ack3, irq_ack4, irq_ack5;
 reg  [7:0]  selectec_dev;
 
 // ================= CPU ASIGNATION IRQS =================
@@ -19,10 +19,12 @@ reg         dev1_enable = 0;
 reg         dev2_enable = 0;
 reg         dev3_enable = 0;
 reg         dev4_enable = 0;
+reg         cassete_enable = 0;
 reg  [7:0]  dev1_data = 0;
 reg  [7:0]  dev2_data = 0;
 reg  [7:0]  dev3_data = 0;
 reg  [7:0]  dev4_data = 0;
+reg  [7:0]  cassete_data = 0;
 
 // ================= SERIAL COM1 PORT =================
 reg         com1_rdnxtch = 0;
@@ -34,21 +36,25 @@ reg         com1_next_char_is_cmd = 0;
 assign      irq =   irq1 |
                     irq2 |
                     irq3 |
-                    irq4;
+                    irq4 |
+                    irq5;
 assign      irq_addr =  (selectec_dev == 1) ? addr1 :
                         (selectec_dev == 2) ? addr2 : 
                         (selectec_dev == 3) ? addr3 : 
                         (selectec_dev == 4) ? addr4 : 
+                        (selectec_dev == 5) ? addr5 : 
                         32'b0;
 assign      irq_data = (selectec_dev == 1) ? data1 :
                        (selectec_dev == 2) ? data2 : 
                        (selectec_dev == 3) ? data3 : 
                        (selectec_dev == 4) ? data4 : 
+                       (selectec_dev == 5) ? data5 : 
                        8'b0;
 assign      irq_ack1 = irq_ack & (selectec_dev == 1);
 assign      irq_ack2 = irq_ack & (selectec_dev == 2);
 assign      irq_ack3 = irq_ack & (selectec_dev == 3);
 assign      irq_ack4 = irq_ack & (selectec_dev == 4);
+assign      irq_ack5 = irq_ack & (selectec_dev == 5);
 
 // ================= CHIP BUS =================
 
@@ -103,6 +109,16 @@ device #(.BASE_ADDR(32'h3)) downButton(
     .irq_ack        (irq_ack4)
 );
 
+device #(.BASE_ADDR(32'h4)) cassete(
+    .clk            (clk),
+    .enable         (cassete_enable),
+    .data_in        (cassete_data),
+    .irq            (irq5),
+    .irq_addr       (addr5),
+    .irq_data       (data5),
+    .irq_ack        (irq_ack5)
+);
+
 always @(posedge clk) begin
     // reseteo del puerto serial
     if (reset) begin
@@ -135,25 +151,29 @@ always @(posedge clk) begin
         uut.cpg.memory[4095] <= 0;
     end
     if (irq1) 
-        selectec_dev <= 1;
+        selectec_dev = 1;
     else if (irq2) 
-        selectec_dev <= 2;
+        selectec_dev = 2;
     else if (irq3) 
-        selectec_dev <= 3;
+        selectec_dev = 3;
     else if (irq4) 
-        selectec_dev <= 4;
+        selectec_dev = 4;
+    else if (irq5) 
+        selectec_dev = 5;
     else 
-        selectec_dev <= 0;
+        selectec_dev = 0;
 end
 
 initial begin
     $display("pulsar5024XM_x32 chip debug");
     $readmemh("program.hex", uut.cpg.memory);
     uut.quiet = 1;
-    //$dumpfile("wave.vcd");
-    //$dumpvars(0, tb);
 
     #10 reset = 0;
+
+    #20 cassete_data = 0;
+    #1 cassete_enable = 1;
+    #2 cassete_enable = 0;
 
     /*#20 dev1_data = 8'd23;
     #1  dev1_enable = 1;

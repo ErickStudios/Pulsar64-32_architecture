@@ -12,8 +12,26 @@ Assume-Org          0
 
 SERIAL_MODE_SWITCH  Equ  0x01
 
+; ===========================================
+;           VECTORS & FUNCS
+;
+; vectors de dispositivos, funciones, ints
+; irqs, de reset, etc
+;
+; ===========================================
+
+; ===========================================
+; puntero a la funcion que se ejecuta cuando
+; el cpu inicia, no es de la pc es del cpu
+; en general
+;
 _reset_vector:
     Assume-Dword    _init
+
+; ===========================================
+; vectores de dispositivos y sus irqs que
+; los atienden cada vez que lo requieren
+;
 _devices_vector:
     _alphaBtn_vec_ptr:
         Assume-Dword alpha_button_irq
@@ -28,86 +46,146 @@ _devices_vector:
 
 Assume-Fill         0x1F0
 
+; ===========================================
 ; vectors de funciones del firmware
+;
 _vectors:
     Assume-Word     put_char
     Assume-Word     put_msg
     Assume-Word     put_msg
 
+; ===========================================
+;           STAGES FIRMWARE
+;
+; etapas del firmware sobre su boot
+;
+; ===========================================
+
+; ===========================================
+; inicializa el firmware
+;
 _init:
     ; inicializar la consola serial
     Lea-Dword       serial_port_cmd
     Out-Byte        SERIAL_MODE_SWITCH
-                              ; no esta lista la consola serial o cuando la apagas o
-                              ; depues de un comando entonces haces que el proximo
-                              ; byte que envies sea el parametro con el que enviaste 
-                              ; el comando
-    Add-Byte-Inm-Inm 1, 0     ; el modo de limpiar com1 y por ahora directamente 
-                              ; le puedes poner el modo de print out
-    Jmp-Word-Call   put_char  ; mandrlo
-    Jmp-Dword-Call  fixSerial ; si no lo sabian si mandas un caracter en estado cuando
+                                ; no esta lista la consola serial o cuando la apagas o
+                                ; depues de un comando entonces haces que el proximo
+                                ; byte que envies sea el parametro con el que enviaste 
+                                ; el comando
+    Add-Byte-Inm-Inm 1, 0       ; el modo de limpiar com1 y por ahora directamente 
+                                ; le puedes poner el modo de print out
+    Jmp-Word-Call   put_char    ; mandrlo
+    Jmp-Dword-Call  fixSerial   ; si no lo sabian si mandas un caracter en estado cuando
 
-    Jmp-Dword-Call  fixSerial
-    Lea-Dword       bootmsg
-    Jmp-Dword-Call  put_msg
+    Jmp-Dword-Call  fixSerial   ; arregla la serial
+    Lea-Dword       bootmsg     ; manda el mensaje
+    Jmp-Dword-Call  put_msg     ; pone el mensaje
+
+; ===========================================
+; el loop que el firmware tiene para ser un
+; os pequeño en si mismo y esperar eventos
+;
 loop:
-    Hlt
-    Jmp-Word-Clasic loop
+    Hlt                         ; espera
+    Jmp-Word-Clasic loop        ; salta
 
 fixSerial:
     Add-Byte-Inm-Inm ' ', 0
     Jmp-Word-Clasic put_char
 
-; ================= funcs =================
+; ===========================================
+;           SERIAL FUNCS
+;
+; funciones para la consola serial y el puerto
+; de depuracion de la PC
+;
+; ===========================================
 
-; put a character
+; ===========================================
+; manda un caracter a la consola serial
+;
 put_char:
-    Push-Dword      Px
-    Lea-Dword       serial_char_send
-    Out-Byte        0
-    Out-Byte        Out
-    Lea-Dword       Sp
-    Jmp-Dword-Clasic Sp
+    Push-Dword      Px          ; poner dword
+    Lea-Dword       serial_char_send ; el caracter a mandar
+    Out-Byte        0           ; actualizar
+    Out-Byte        Out         ; mandar
+    Lea-Dword       Sp          ; restaurar la direccion
+    Jmp-Dword-Clasic Sp         ; regresar
 
+; ===========================================
+; pone un mensaje en la consola serial
+;
 put_msg:
-    Push-Dword      Px
+    Push-Dword      Px          ; guardar dword
+
+; ===========================================
+; el loop de poner un mensaje en la consola
+; serial
+;
 put_msg_loop:
-    Mov-Byte
-    Push-Byte       Out
-    Cmp-Byte-Inm-Sp 0
-    Mov-Byte
-    Jmp-Word-Zero   put_msg_end
-    Jmp-Dword-Call  put_char
-    Push-Dword      Px
-    Add-Dword-Sp-Inm 1
-    Lea-Dword       Out
-    Jmp-Dword-Clasic put_msg_loop
+    Mov-Byte                    ; obtiene el byte
+    Push-Byte       Out         ; pone el byte en el stack
+    Cmp-Byte-Inm-Sp 0           ; compara con terminador
+    Mov-Byte                    ; obtiene el byte
+    Jmp-Word-Zero   put_msg_end ; si es igual terminar
+    Jmp-Dword-Call  put_char    ; pone el caracter en la consola serial
+    Push-Dword      Px          ; guarda la dword
+    Add-Dword-Sp-Inm 1          ; suma la direccion de memoria
+    Lea-Dword       Out         ; obtiene dword
+    Jmp-Dword-Clasic put_msg_loop ; salta
+    
+; ===========================================
+; el final del mensaje
+;
 put_msg_end:
-    Lea-Dword       Sp
-    Jmp-Dword-Clasic Sp
+    Lea-Dword       Sp          ; lee la dword
+    Jmp-Dword-Clasic Sp         ; regresar
 
+; ===========================================
+;           FUNC BUTTONS
+;
+; funciones para los botones de funciones de
+; la PC,
+; los botones son funciones de rapido acceso}
+; para navegar entre menus, seleccionar cosas,
+; para confirmacion y cuadros de dialogo, entre
+; otras funciones
+;
+; ===========================================
 
-; ================= irqs =================
-; the irqs
-
+; ===========================================
+; boton 'A'
+;
 alpha_button_irq:
     Push-Dword      Px
-    Lea-Dword       25
+    ; ... comming soon ...
     Lea-Dword       Sp
     Jmp-Dword-Clasic Sp
+
+; ===========================================
+; boton 'B'
+;
 beta_button_irq:
     Push-Dword      Px
-    Lea-Dword       30
+    ; ... comming soon ...
     Lea-Dword       Sp
     Jmp-Dword-Clasic Sp
+
+; ===========================================
+; boton 'UP'
+;
 up_button_irq:
     Push-Dword      Px
-    Lea-Dword       35
+    ; ... comming soon ...
     Lea-Dword       Sp
     Jmp-Dword-Clasic Sp
+
+; ===========================================
+; boton 'DOWN'
+;
 down_button_irq:
     Push-Dword      Px
-    Lea-Dword       40
+    ; ... comming soon ...
     Lea-Dword       Sp
     Jmp-Dword-Clasic Sp
 
@@ -117,7 +195,11 @@ Assume-Fill         0xFFF
 ;           SERIAL MMIO
 ;
 ; datos de MMIO para la consola serial y mas
-; cosas relacionadas con la depuracion
+; cosas relacionadas con la depuracion,
+; la consola serial es una parte escencial
+; de la depuracion de programas y mensajes
+; de logs, ya que este PC al no haber pantalla
+; necesita algo para expresarse
 ;
 ; ===========================================
 
@@ -157,12 +239,19 @@ bootmsg:
 
 Assume-Fill     0x2FFF
 
-; ================= cassete =================
-; funciones de cassete
 
 ; ===========================================
-;       CASSETE IRQ ISR
+;           CASSETE FUNCS
 ;
+; funciones y MMIO para el cassete del disco
+; principal A: alias fs0: blk0: etc
+; la unidad principal del dispositivo por donde
+; medio se insertan los OS, juegos baremetal
+; entre otros programas de arranque post bios
+;
+; ===========================================
+
+; ===========================================
 ; funcion interna de cassete no el de para 
 ; obtener funciones si no datos o mas cosas
 ;
@@ -173,6 +262,5 @@ cassete_irq:
 ; fin de la funcion de cassete
 ;
 cassete_fnc_end:
-
     Lea-Dword       Sp
     Jmp-Dword-Clasic Sp
