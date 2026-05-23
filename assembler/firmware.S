@@ -65,6 +65,9 @@ _vectors:
 ; inicializa el firmware
 ;
 _init:
+    Lea-dword       firmware_on_flag
+    Out-Byte        0
+
     ; inicializar la consola serial
     Lea-Dword       serial_port_cmd
     Out-Byte        SERIAL_MODE_SWITCH
@@ -78,6 +81,8 @@ _init:
     Jmp-Dword-Call  fixSerial   ; si no lo sabian si mandas un caracter en estado cuando
 
     Jmp-Dword-Call  fixSerial   ; arregla la serial
+    Lea-dword       firmware_on_flag
+    Out-Byte        1
     Lea-Dword       bootmsg     ; manda el mensaje
     Jmp-Dword-Call  put_msg     ; pone el mensaje
 
@@ -236,9 +241,8 @@ Assume-Fill     0x1FFF
 
 bootmsg:
     Assume-Byte     'b', 'o', 'o', 't', 'i', 'n', 'g', ' ', 'f', 'r', 'o',  'm', ' ', 'R', 'O', 'M', 10, 0
-
-Assume-Fill     0x2FFF
-
+disk_inserted:
+    Assume-Byte     'c','a','s','s','e','t','e',' ','i','n','s','e','r','t','e','d', 10, 0
 
 ; ===========================================
 ;           CASSETE FUNCS
@@ -251,16 +255,107 @@ Assume-Fill     0x2FFF
 ;
 ; ===========================================
 
+Assume-Fill     0x2FFF
+
+CASSETE_READ_DOT    Equ 12  ; lee un punto en el cassete
+                            ; es una respuesta a una de las 
+                            ; funciones del bios
+
+CASSETE_READ_SECTA  Equ 18  ; lee un sector del cassete indexado desde
+                            ; 0 a chorrocientos millones
+
+CASSETE_WAITING_UE  Equ 24  ; que esta pendiente que se inserto un
+                            ; cassete y le esta preguntando al firmware
+                            ; que quieres que haga con ese cabron
+                            ; osea en espaniol estandart, que el cassete
+                            ; se ha insertado hace tiempo o justo ahora y tiene
+                            ; pendiente que el bios haga algo con eso
+
+; ===========================================
+; variable que indica que va a hacer el cassete
+; en la irq que se llamo actualmente
+;
+; cassete_external_cmd_alias_que_quieres_we:
+cassete_external_cmd:
+    Assume-Byte 0xFF
+
+Assume-Fill 0x4F00
+
+; ===========================================
+; variables que indican que el cassete se leyo
+; o no? que ya me confundi
+;
+cassete_readed_sector_finish:
+    Assume-Byte 0
+
+Assume-Fill 0x4F02
+
+; ===========================================
+; variable que indica el sector a leer con read
+; sector
+;
+cassete_readed_sector_finish:
+    Assume-Word 0
+
+; ===========================================
+; variable que indica el sector que ha leido esa cosa
+;
+Assume-Fill 0x4FFF
+;cassete_external_sector_lo_que_lello_este_men:
+cassete_external_sector:
+    Assume-Fill 0x51FF
+
 ; ===========================================
 ; funcion interna de cassete no el de para 
 ; obtener funciones si no datos o mas cosas
 ;
 cassete_irq:
     Push-Dword      Px
+    Lea-Dword       cassete_external_cmd
+
+    Mov-Byte
+    Push-Byte       Out
+    Cmp-Byte-Inm-Sp CASSETE_WAITING_UE
+    Jmp-Word-Zero   cassete_fnc_inserted
+    
+    Mov-Byte
+    Push-Byte       Out
+    Cmp-Byte-Inm-Sp CASSETE_READ_SECTA
+    Jmp-Word-Zero   cassete_fnc_read_sector
+
     Jmp-Dword-Clasic cassete_fnc_end
+
+; ===========================================
+; cuando leyo un sector
+;
+cassete_fnc_read_sector:
+    Lea-Dword       cassete_readed_sector_finish
+    Out-Byte        1
+    Jmp-Dword-Clasic cassete_fnc_end
+
+; ===========================================
+; cuando se inserto un cassete
+;
+cassete_fnc_inserted:
+    Lea-Dword       disk_inserted ; manda el mensaje
+    Jmp-Dword-Call  put_msg     ; pone el mensaje
+    Jmp-Dword-Clasic cassete_fnc_end
+
 ; ===========================================
 ; fin de la funcion de cassete
 ;
 cassete_fnc_end:
     Lea-Dword       Sp
     Jmp-Dword-Clasic Sp
+
+Assume-Fill 0x6FFF
+
+Assume-Byte 'p', 'o', 'r', ' ', 'q', 'u', 'e', ' ', 'l', 'l', 'e', 'g', 'a', 's','t','e',' ','a','q','u','i','?'
+Assume-Fill 0x7220
+
+Assume-Byte 'd','a','a',' ','d','a',' ','d','a',' ','d','a','a',' ','d','a',' ','d','a',' ','d','a','a',' '
+
+Assume-Fill 0x7FFF
+
+firmware_on_flag:
+    Assume-Byte     0

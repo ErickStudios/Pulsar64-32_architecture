@@ -3,6 +3,7 @@ module device #(
 )(
     input               clk,
     input               enable,
+    input               reset,
     input [7:0]         data_in,
     output reg          irq,
     output reg [31:0]   irq_addr,
@@ -10,16 +11,15 @@ module device #(
     input               irq_ack
 );
 
-reg active;
+reg                     active;
 
-initial begin
-    irq = 0;
-    active = 0;
-    irq_addr = 0;
-    irq_data = 0;
-end
 always @(posedge clk) begin
-
+    if (reset) begin
+        irq = 0;
+        active = 0;
+        irq_addr = 0;
+        irq_data = 0;
+    end
     if (enable)
         active = 1;
     if (active && !irq) begin

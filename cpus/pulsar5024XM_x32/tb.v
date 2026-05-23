@@ -13,6 +13,17 @@ wire [7:0]  data1, data2, data3, data4, data5;
 wire        irq_ack;
 wire        irq_ack1, irq_ack2, irq_ack3, irq_ack4, irq_ack5;
 reg  [7:0]  selectec_dev;
+reg  [7:0]  firmware_status = 0;
+
+// ================= MEMORY EXTERNAL BUS =================
+reg  [7:0]  mwv;
+reg  [31:0] mwa;
+reg         mwb;
+reg         mwx;
+
+// ================= CASSETE DISK PROPERTYS =================
+reg  [3:0]  cassete_inserted = 1;
+reg  [7:0]  disk0_cassete [0:64000];
 
 // ================= CPU ASIGNATION IRQS =================
 reg         dev1_enable = 0;
@@ -38,23 +49,25 @@ assign      irq =   irq1 |
                     irq3 |
                     irq4 |
                     irq5;
-assign      irq_addr =  (selectec_dev == 1) ? addr1 :
-                        (selectec_dev == 2) ? addr2 : 
-                        (selectec_dev == 3) ? addr3 : 
-                        (selectec_dev == 4) ? addr4 : 
-                        (selectec_dev == 5) ? addr5 : 
-                        32'b0;
-assign      irq_data = (selectec_dev == 1) ? data1 :
-                       (selectec_dev == 2) ? data2 : 
-                       (selectec_dev == 3) ? data3 : 
-                       (selectec_dev == 4) ? data4 : 
-                       (selectec_dev == 5) ? data5 : 
-                       8'b0;
-assign      irq_ack1 = irq_ack & (selectec_dev == 1);
-assign      irq_ack2 = irq_ack & (selectec_dev == 2);
-assign      irq_ack3 = irq_ack & (selectec_dev == 3);
-assign      irq_ack4 = irq_ack & (selectec_dev == 4);
-assign      irq_ack5 = irq_ack & (selectec_dev == 5);
+assign      irq_addr =
+                    irq1 ? addr1 :
+                    irq2 ? addr2 :
+                    irq3 ? addr3 :
+                    irq4 ? addr4 :
+                    irq5 ? addr5 :
+                    32'b0;
+assign      irq_data =
+                    irq1 ? data1 :
+                    irq2 ? data2 :
+                    irq3 ? data3 :
+                    irq4 ? data4 :
+                    irq5 ? data5 :
+                    8'b0;
+assign irq_ack1 = irq_ack & irq1;
+assign irq_ack2 = irq_ack & irq2;
+assign irq_ack3 = irq_ack & irq3;
+assign irq_ack4 = irq_ack & irq4;
+assign irq_ack5 = irq_ack & irq5;
 
 // ================= CHIP BUS =================
 
@@ -64,7 +77,10 @@ cpu uut(
     .irq            (irq),
     .irq_addr       (irq_addr),
     .irq_data       (irq_data),
-    .irq_ack        (irq_ack)
+    .irq_ack        (irq_ack),
+    .mem_wrt_val    (mwv),
+    .mem_wrt_addr   (mwa),
+    .mem_wrt_bool   (mwb)
 );
 
 // ================= DEVICES BUS =================
@@ -76,7 +92,8 @@ device #(.BASE_ADDR(32'h0)) alphaButton(
     .irq            (irq1),
     .irq_addr       (addr1),
     .irq_data       (data1),
-    .irq_ack        (irq_ack1)
+    .irq_ack        (irq_ack1),
+    .reset          (reset)
 );
 
 device #(.BASE_ADDR(32'h1)) betaButton(
@@ -86,7 +103,8 @@ device #(.BASE_ADDR(32'h1)) betaButton(
     .irq            (irq2),
     .irq_addr       (addr2),
     .irq_data       (data2),
-    .irq_ack        (irq_ack2)
+    .irq_ack        (irq_ack2),
+    .reset          (reset)
 );
 
 device #(.BASE_ADDR(32'h2)) upButton(
@@ -96,7 +114,8 @@ device #(.BASE_ADDR(32'h2)) upButton(
     .irq            (irq3),
     .irq_addr       (addr3),
     .irq_data       (data3),
-    .irq_ack        (irq_ack3)
+    .irq_ack        (irq_ack3),
+    .reset          (reset)
 );
 
 device #(.BASE_ADDR(32'h3)) downButton(
@@ -106,7 +125,8 @@ device #(.BASE_ADDR(32'h3)) downButton(
     .irq            (irq4),
     .irq_addr       (addr4),
     .irq_data       (data4),
-    .irq_ack        (irq_ack4)
+    .irq_ack        (irq_ack4),
+    .reset          (reset)
 );
 
 device #(.BASE_ADDR(32'h4)) cassete(
@@ -116,57 +136,77 @@ device #(.BASE_ADDR(32'h4)) cassete(
     .irq            (irq5),
     .irq_addr       (addr5),
     .irq_data       (data5),
-    .irq_ack        (irq_ack5)
+    .irq_ack        (irq_ack5),
+    .reset          (reset)
 );
 
 always @(posedge clk) begin
+    firmware_status = uut.memory[32'h7FFF];
+
     // reseteo del puerto serial
     if (reset) begin
         com1_next_cmd = 8'hFF;
         com1_next_char_is_cmd = 0;
         com1_mode = 8'hFF;
         com1_rdnxtch = 0;
+        cassete_inserted = 1;
+    end
+    else if (cassete_inserted == 1 && firmware_status == 1) begin
+        cassete_inserted = 2;
+        // se inserto un cassete o hay uno y se le pide al firmware que lo maneje
+        mwa <= 32'h2FFF;
+        mwv <= 24;
+        mwb <= 1;
+        cassete_enable <= 1;
+    end
+    else if (cassete_inserted == 2) begin
+      cassete_inserted = 3;
+    end
+    else if (cassete_inserted == 3) begin
+        cassete_enable <= 0;
+        cassete_inserted = 0;
+        mwb <= 0;
     end
 
     // mandar comandos al com1
-    if (uut.cpg.memory[4096] != 0) begin
-        com1_next_cmd = uut.cpg.memory[4096];
-        uut.cpg.memory[4096] = 0;
+    if (uut.memory[4096] != 0) begin
+        com1_next_cmd = uut.memory[4096];
+        mwa <= 4096;
+        mwv <= 0;
+        mwb <= 1;
         com1_next_char_is_cmd = 1;
     end
 
-    if (uut.cpg.memory[4095] == 0) begin 
+    if (uut.memory[4095] == 0) begin 
         com1_rdnxtch <= 1;
     end
     
-    else if (uut.cpg.memory[4095] != 0 && com1_rdnxtch) begin
+    else if (uut.memory[4095] != 0 && com1_rdnxtch) begin
         com1_rdnxtch <= 0;
         if (com1_next_char_is_cmd && com1_next_cmd == 8'h01) begin
-            com1_mode = uut.cpg.memory[4095];
+            com1_mode = uut.memory[4095];
             com1_next_char_is_cmd = 0;
         end
         else begin 
-            if (com1_mode == 1) $write("%c", uut.cpg.memory[4095]);
+            if (com1_mode == 1) $write("%c", uut.memory[4095]);
         end
-        uut.cpg.memory[4095] <= 0;
+        mwa <= 4095;
+        mwv <= 0;
+        mwb <= 1;
+        mwx <= 1;
     end
-    if (irq1) 
-        selectec_dev = 1;
-    else if (irq2) 
-        selectec_dev = 2;
-    else if (irq3) 
-        selectec_dev = 3;
-    else if (irq4) 
-        selectec_dev = 4;
-    else if (irq5) 
-        selectec_dev = 5;
-    else 
-        selectec_dev = 0;
+
+    if (mwx) begin
+        mwx <= 0;
+        mwb <= 0;
+    end
 end
 
 initial begin
     $display("pulsar5024XM_x32 chip debug");
-    $readmemh("program.hex", uut.cpg.memory);
+    $readmemh("program.hex", uut.memory);
+    $readmemh("cassete.hex", disk0_cassete);
+
     uut.quiet = 1;
 
     #10 reset = 0;
@@ -190,8 +230,9 @@ initial begin
     #50 dev4_data = 8'd46;
     #1  dev4_enable = 1;
     #2  dev4_enable = 0;*/
+    //#1000 $display(firmware_status);
 
-    #2000 $finish;
+    #10000 $finish;
 end
 
 endmodule
