@@ -17,6 +17,11 @@ reg  [7:0]  firmware_status = 0;
 reg  [7:0]  modifier_01 = 0;
 reg  [7:0]  ohman = 0;
 
+// ================= NATIVE MMIO =================
+wire        dev_wrt_en;
+wire [31:0] dev_wrt_addr;
+wire [7:0]  dev_wrt_val;
+
 // ================= MEMORY EXTERNAL BUS =================
 reg  [7:0]  mwv;
 wire [7:0]  mrv;
@@ -101,68 +106,100 @@ cpu uut(
 
     .mem_rdr_val    (mrv),
     .mem_rdr_addr   (mra),
-    .mem_rdr_bool   (mrb)
+    .mem_rdr_bool   (mrb),
+
+    .dev_wrt_en     (dev_wrt_en),
+    .dev_wrt_addr   (dev_wrt_addr),
+    .dev_wrt_val    (dev_wrt_val)
 );
 
 // ================= DEVICES BUS =================
 
 device #(.BASE_ADDR(32'h0)) alphaButton(
     .clk            (clk),
+    .reset          (reset),
     .enable         (dev1_enable),
     .data_in        (dev1_data),
+
     .irq            (irq1),
     .irq_addr       (addr1),
     .irq_data       (data1),
     .irq_ack        (irq_ack1),
-    .reset          (reset)
+
+    .wrt_en         (dev_wrt_en),
+    .wrt_addr       (dev_wrt_addr),
+    .wrt_val        (dev_wrt_val)
 );
 
 device #(.BASE_ADDR(32'h1)) betaButton(
     .clk            (clk),
+    .reset          (reset),
     .enable         (dev2_enable),
     .data_in        (dev2_data),
+
     .irq            (irq2),
     .irq_addr       (addr2),
     .irq_data       (data2),
     .irq_ack        (irq_ack2),
-    .reset          (reset)
+
+    .wrt_en         (dev_wrt_en),
+    .wrt_addr       (dev_wrt_addr),
+    .wrt_val        (dev_wrt_val)
 );
 
 device #(.BASE_ADDR(32'h2)) upButton(
     .clk            (clk),
+    .reset          (reset),
     .enable         (dev3_enable),
     .data_in        (dev3_data),
+
     .irq            (irq3),
     .irq_addr       (addr3),
     .irq_data       (data3),
     .irq_ack        (irq_ack3),
-    .reset          (reset)
+
+    .wrt_en         (dev_wrt_en),
+    .wrt_addr       (dev_wrt_addr),
+    .wrt_val        (dev_wrt_val)
 );
 
 device #(.BASE_ADDR(32'h3)) downButton(
     .clk            (clk),
+    .reset          (reset),
     .enable         (dev4_enable),
     .data_in        (dev4_data),
+
     .irq            (irq4),
     .irq_addr       (addr4),
     .irq_data       (data4),
     .irq_ack        (irq_ack4),
-    .reset          (reset)
+
+    .wrt_en         (dev_wrt_en),
+    .wrt_addr       (dev_wrt_addr),
+    .wrt_val        (dev_wrt_val)
 );
 
 device #(.BASE_ADDR(32'h4)) cassete(
     .clk            (clk),
+    .reset          (reset),
     .enable         (cassete_enable),
     .data_in        (cassete_data),
+
     .irq            (irq5),
     .irq_addr       (addr5),
     .irq_data       (data5),
     .irq_ack        (irq_ack5),
-    .reset          (reset)
+    
+    .wrt_en         (dev_wrt_en),
+    .wrt_addr       (dev_wrt_addr),
+    .wrt_val        (dev_wrt_val)
 );
 
 always @(posedge clk) begin
     firmware_status = uut.memory[32'h7FFF];
+
+    /*if (dev_wrt_en && dev_wrt_addr == 0) begin
+    end*/
 
     case (ohman)
     8'h00: begin
@@ -202,15 +239,12 @@ always @(posedge clk) begin
         else if (cassete_inserted == 3) begin
             cassete_enable <= 0;
             cassete_inserted = 0;
-            ohman = 0;
+            ohman = 2;
             mwb <= 0;
         end
         else begin
           ohman = ohman + 1;
         end
-    end
-    default: begin
-      ohman = 0;
     end
     endcase
 
@@ -223,28 +257,43 @@ always @(posedge clk) begin
         cassete_inserted = 1;
     end
 
-    if (uut.memory[4095] == 0) begin 
-        com1_rdnxtch <= 1;
-    end
-    
-    else if (uut.memory[4095] != 0 && com1_rdnxtch) begin
-        com1_rdnxtch <= 0;
-        if (com1_next_char_is_cmd && com1_next_cmd == 8'h01) begin
-            com1_mode = uut.memory[4095];
-            com1_next_char_is_cmd = 0;
+    if (ohman == 2) begin
+        if (com1_cmd_mrstage == 0) begin
+            modifier_01 <= 1;
+            mrb <= 1;
+            com1_cmd_mrstage <= 1;
         end
-        else begin 
-            if (com1_mode == 1) $write("%c", uut.memory[4095]);
+        else if (com1_cmd_mrstage == 1) begin
+            com1_cmd_mrstage <= 2;
         end
-        modifier_01 = 1;
-        mwv <= 0;
-        mwb <= 1;
-        mwx <= 1;
-    end
+        else if (com1_cmd_mrstage == 2) begin
+            com1_cmd_mrstage <= 0;
+            ohman <= 0;
 
-    if (mwx) begin
-        mwx <= 0;
-        mwb <= 0;
+            if (mrv == 0) begin 
+                com1_rdnxtch <= 1;
+            end
+            
+            else if (mrv != 0 && com1_rdnxtch) begin
+                com1_rdnxtch <= 0;
+                if (com1_next_char_is_cmd && com1_next_cmd == 8'h01) begin
+                    com1_mode = mrv;
+                    com1_next_char_is_cmd = 0;
+                end
+                else begin 
+                    if (com1_mode == 1) $write("%c", mrv);
+                end
+                modifier_01 = 1;
+                mwv <= 0;
+                mwb <= 1;
+                mwx <= 1;
+            end
+
+            if (mwx) begin
+                mwx <= 0;
+                mwb <= 0;
+            end
+        end
     end
 end
 
@@ -276,9 +325,8 @@ initial begin
     #50 dev4_data = 8'd46;
     #1  dev4_enable = 1;
     #2  dev4_enable = 0;*/
-    //#1000 $display(firmware_status);
 
-    #10000 $finish;
+    #100000 $finish;
 end
 
 endmodule

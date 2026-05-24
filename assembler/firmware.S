@@ -81,10 +81,16 @@ _init:
     Jmp-Dword-Call  fixSerial   ; si no lo sabian si mandas un caracter en estado cuando
 
     Jmp-Dword-Call  fixSerial   ; arregla la serial
-    Lea-dword       firmware_on_flag
-    Out-Byte        1
     Lea-Dword       bootmsg     ; manda el mensaje
     Jmp-Dword-Call  put_msg     ; pone el mensaje
+    Lea-dword       firmware_on_flag
+    Out-Byte        1
+    Lea-Dword       alpha_mmio
+    Out-Byte        1
+    Lea-Dword       beta_mmio
+    Out-Byte        2
+    Lea-Dword       up_mmio
+    Out-Byte        3
 
 ; ===========================================
 ; el loop que el firmware tiene para ser un
@@ -360,4 +366,16 @@ Assume-Byte 'd','a','a',' ','d','a',' ','d','a',' ','d','a','a',' ','d','a',' ',
 Assume-Fill 0x7FFF
 
 firmware_on_flag:
+    Assume-Byte     0
+
+Assume-Fill 64000
+alpha_mmio:
+    Assume-Byte     0
+beta_mmio:
+    Assume-Byte     0
+up_mmio:
+    Assume-Byte     0
+down_mmio:
+    Assume-Byte     0
+cassete_mmio:
     Assume-Byte     0
