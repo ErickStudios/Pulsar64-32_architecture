@@ -14,12 +14,26 @@ wire        irq_ack;
 wire        irq_ack1, irq_ack2, irq_ack3, irq_ack4, irq_ack5;
 reg  [7:0]  selectec_dev;
 reg  [7:0]  firmware_status = 0;
+reg  [7:0]  modifier_01 = 0;
+reg  [7:0]  ohman = 0;
 
 // ================= MEMORY EXTERNAL BUS =================
 reg  [7:0]  mwv;
-reg  [31:0] mwa;
+wire [7:0]  mrv;
+wire [31:0] mwa;
+wire [31:0] mra;
 reg         mwb;
+reg         mrb;
 reg         mwx;
+
+assign mwa =
+    modifier_01 == 0 ?  32'h7FFF :
+    modifier_01 == 1 ?  4095 :
+    modifier_01 == 2 ?  4096 :
+    modifier_01 == 3 ?  32'h2FFF :
+                        32'h00000000;
+
+assign mra = mwa;
 
 // ================= CASSETE DISK PROPERTYS =================
 reg  [3:0]  cassete_inserted = 1;
@@ -42,6 +56,7 @@ reg         com1_rdnxtch = 0;
 reg  [7:0]  com1_mode = 0;
 reg  [7:0]  com1_next_cmd = 0;
 reg         com1_next_char_is_cmd = 0;
+reg  [1:0]  com1_cmd_mrstage = 0;
 
 // ================= CPU ASIGNATION IRQS =================
 assign      irq =   irq1 |
@@ -74,13 +89,19 @@ assign irq_ack5 = irq_ack & irq5;
 cpu uut(
     .clk            (clk),
     .reset          (reset),
+
     .irq            (irq),
     .irq_addr       (irq_addr),
     .irq_data       (irq_data),
     .irq_ack        (irq_ack),
+
     .mem_wrt_val    (mwv),
     .mem_wrt_addr   (mwa),
-    .mem_wrt_bool   (mwb)
+    .mem_wrt_bool   (mwb),
+
+    .mem_rdr_val    (mrv),
+    .mem_rdr_addr   (mra),
+    .mem_rdr_bool   (mrb)
 );
 
 // ================= DEVICES BUS =================
@@ -143,6 +164,56 @@ device #(.BASE_ADDR(32'h4)) cassete(
 always @(posedge clk) begin
     firmware_status = uut.memory[32'h7FFF];
 
+    case (ohman)
+    8'h00: begin
+        if (com1_cmd_mrstage == 0) begin
+            com1_cmd_mrstage <= 1;
+            modifier_01 = 2;
+            mrb <= 1;
+        end
+        else if (com1_cmd_mrstage == 1) begin
+            com1_cmd_mrstage <= 2; // tranquilo el cpu ya esta trabajando en tu solicitud
+        end
+        // listom cariño
+        else if (com1_cmd_mrstage == 2) begin
+            com1_cmd_mrstage <= 0;
+            ohman = ohman + 1;
+            if (mrv != 0) begin
+                com1_next_cmd = mrv;
+                modifier_01 = 2;
+                mwv <= 0;
+                mwb <= 1;
+                com1_next_char_is_cmd = 1;
+            end
+        end
+    end
+    8'h01: begin
+        if (cassete_inserted == 1 && firmware_status == 1) begin
+            cassete_inserted = 2;
+            // se inserto un cassete o hay uno y se le pide al firmware que lo maneje
+            modifier_01 = 3;
+            mwv <= 24;
+            mwb <= 1;
+            cassete_enable <= 1;
+        end
+        else if (cassete_inserted == 2) begin
+            cassete_inserted = 3;
+        end
+        else if (cassete_inserted == 3) begin
+            cassete_enable <= 0;
+            cassete_inserted = 0;
+            ohman = 0;
+            mwb <= 0;
+        end
+        else begin
+          ohman = ohman + 1;
+        end
+    end
+    default: begin
+      ohman = 0;
+    end
+    endcase
+
     // reseteo del puerto serial
     if (reset) begin
         com1_next_cmd = 8'hFF;
@@ -150,31 +221,6 @@ always @(posedge clk) begin
         com1_mode = 8'hFF;
         com1_rdnxtch = 0;
         cassete_inserted = 1;
-    end
-    else if (cassete_inserted == 1 && firmware_status == 1) begin
-        cassete_inserted = 2;
-        // se inserto un cassete o hay uno y se le pide al firmware que lo maneje
-        mwa <= 32'h2FFF;
-        mwv <= 24;
-        mwb <= 1;
-        cassete_enable <= 1;
-    end
-    else if (cassete_inserted == 2) begin
-      cassete_inserted = 3;
-    end
-    else if (cassete_inserted == 3) begin
-        cassete_enable <= 0;
-        cassete_inserted = 0;
-        mwb <= 0;
-    end
-
-    // mandar comandos al com1
-    if (uut.memory[4096] != 0) begin
-        com1_next_cmd = uut.memory[4096];
-        mwa <= 4096;
-        mwv <= 0;
-        mwb <= 1;
-        com1_next_char_is_cmd = 1;
     end
 
     if (uut.memory[4095] == 0) begin 
@@ -190,7 +236,7 @@ always @(posedge clk) begin
         else begin 
             if (com1_mode == 1) $write("%c", uut.memory[4095]);
         end
-        mwa <= 4095;
+        modifier_01 = 1;
         mwv <= 0;
         mwb <= 1;
         mwx <= 1;

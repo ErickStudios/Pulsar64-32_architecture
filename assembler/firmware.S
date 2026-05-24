@@ -311,6 +311,7 @@ cassete_external_sector:
 ;
 cassete_irq:
     Push-Dword      Px
+    Push-Dword      Out
     Lea-Dword       cassete_external_cmd
 
     Mov-Byte
@@ -345,6 +346,7 @@ cassete_fnc_inserted:
 ; fin de la funcion de cassete
 ;
 cassete_fnc_end:
+    Add-Dword-Sp-Inm 0
     Lea-Dword       Sp
     Jmp-Dword-Clasic Sp
 

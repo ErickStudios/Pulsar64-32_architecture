@@ -68,10 +68,13 @@ module cpu(
     input [7:0]     irq_data,
     output reg      irq_ack,
 
-    // memory things
     input [7:0]     mem_wrt_val,
     input [31:0]    mem_wrt_addr,
-    input           mem_wrt_bool
+    input           mem_wrt_bool,
+
+    output reg [7:0] mem_rdr_val,
+    input [31:0]    mem_rdr_addr,
+    input           mem_rdr_bool
 );
 
 // ============== cpu variables ==============
@@ -406,7 +409,11 @@ always @(posedge clk) begin
     // tick of click
     end else begin
         if (mem_wrt_bool) begin
-            memory[mem_wrt_addr] = mem_wrt_val;
+            memory[mem_wrt_addr] <= mem_wrt_val;
+        end
+
+        if (mem_rdr_bool) begin 
+            mem_rdr_val <= memory[mem_rdr_addr]; 
         end
 
         // check alu
