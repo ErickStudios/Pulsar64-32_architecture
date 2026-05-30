@@ -17,6 +17,8 @@ always @(posedge clk) begin
             8'h05: result = a & b;
             8'h06: result = a | b;
             8'h07: result = a ^ b;
+            8'h09: result = a << b;
+            8'h0A: result = a >> b;
             default: result = 0;
         endcase
     end

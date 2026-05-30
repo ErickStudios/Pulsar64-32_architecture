@@ -3,70 +3,48 @@ module device #(
 )(
     input               clk,
     input               enable,
+    input               reset,
     input [7:0]         data_in,
+    
     output reg          irq,
     output reg [31:0]   irq_addr,
     output reg [7:0]    irq_data,
-    input               irq_ack
+    input               irq_ack,
+
+    input               wrt_en,
+    input [31:0]        wrt_addr,
+    input [7:0]         wrt_val
 );
 
-reg active;
+reg  [7:0]              device_buffer;
+reg                     active;
 
-initial begin
-    irq = 0;
-    active = 0;
-    irq_addr = 0;
-    irq_data = 0;
-end
 always @(posedge clk) begin
-
-    if (enable)
-        active = 1;
-    if (active && !irq) begin
-        irq = 1;
-        irq_addr = BASE_ADDR;
-        irq_data = data_in;
-    end
-
-    if (irq && irq_ack) begin
+    if (reset) begin
         irq = 0;
         active = 0;
-    end
+        irq_addr = 0;
+        irq_data = 0;
+        device_buffer <= 0;
+    end else begin
+        if (wrt_en && (wrt_addr == BASE_ADDR)) begin
+            device_buffer <= wrt_val;
+        end
+        
+        if (enable)
+            active = 1;
+        if (active && !irq) begin
+            irq = 1;
+            irq_addr = BASE_ADDR;
+            irq_data = data_in;
+        end
 
+        if (irq && irq_ack) begin
+            irq = 0;
+            active = 0;
+        end
+    end
 end
-endmodule
-module generalRegisters();
-// ============== general registers ==============
-reg  [31:0]     currentPtrAddrs;                    // register of the current uint8_t* ptr
-wire [7:0]      PXB1 = currentPtrAddrs  [31:24];    // byte 1 of PX
-wire [7:0]      PXB2 = currentPtrAddrs  [23:16];    // byte 2 of PX
-wire [7:0]      PXB3 = currentPtrAddrs  [15:8];     // byte 3 of PX
-wire [7:0]      PXB4 = currentPtrAddrs  [7:0];      // byte 4 of PX
-reg  [7:0]      OprOperator;                        // operator operation
-reg  [7:0]      OprOperationBytes;                  // operation bytes length
-reg  [7:0]      valueRegister;                      // DX = *(uint8_t*)PX
-reg  [7:0]      op_id;                              // operation id
-reg  [31:0]     a, b, result;                       // result
-endmodule
-module cpug();
-// ============== cpu mangment ==============
-reg  [7:0]      memory                  [0:64000];  // the memory
-reg  [31:0]     pc;                                 // the program counter
-reg  [31:0]     sp;                                 // the stack pointer
-endmodule
-module cpum();
-// ============== modes ==============
-reg             paused;                             // if the cpu is paused
-reg  [7:0]      ir;                                 // current opcode instruction
-reg  [7:0]      opcode;                             // current opcode
-reg  [7:0]      mode;                               // mode of the operation
-reg  [7:0]      operationModes;                     // operation mode
-reg  [7:0]      flags;                              // the flags of the cpu
-endmodule
-module cpuv();
-reg [31:0]          vector_base;
-reg [31:0]          offset;
-reg [31:0]          irq_vector;
 endmodule
 module alu(
     input       [7:0]   opcode,
@@ -87,6 +65,8 @@ always @(posedge clk) begin
             8'h05: result = a & b;
             8'h06: result = a | b;
             8'h07: result = a ^ b;
+            8'h09: result = a << b;
+            8'h0A: result = a >> b;
             default: result = 0;
         endcase
     end
@@ -99,15 +79,46 @@ module cpu(
     input           irq,
     input [31:0]    irq_addr,
     input [7:0]     irq_data,
-    output reg      irq_ack
+    output reg      irq_ack,
+
+    input [7:0]     mem_wrt_val,
+    input [31:0]    mem_wrt_addr,
+    input           mem_wrt_bool,
+
+    output reg [7:0] mem_rdr_val,
+    input [31:0]    mem_rdr_addr,
+    input           mem_rdr_bool,
+
+    output reg      dev_wrt_en,
+    output reg [31:0] dev_wrt_addr,
+    output reg [7:0]  dev_wrt_val
 );
 
-// ============== cpu components ==============
-cpug                cpg();
-cpum                cpm();
-generalRegisters    gr();
-cpuv                cpv();
+// ============== cpu variables ==============}
+reg  [7:0]          memory [0:96000]; // 64K normal mem, 32K for MMIO
+reg  [31:0]         pc;
+reg  [31:0]         sp;
+reg  [31:0]         currentPtrAddrs;
+wire [7:0]          PXB1 = currentPtrAddrs  [31:24];
+wire [7:0]          PXB2 = currentPtrAddrs  [23:16];
+wire [7:0]          PXB3 = currentPtrAddrs  [15:8];
+wire [7:0]          PXB4 = currentPtrAddrs  [7:0];
+reg  [7:0]          OprOperator;
+reg  [7:0]          OprOperationBytes;
+reg  [7:0]          valueRegister;
+reg  [7:0]          op_id;
+reg  [31:0]         a, b, result;
+reg  [7:0]          ir;
+reg  [7:0]          opcode;
+reg  [7:0]          mode;
+reg  [7:0]          operationModes;
+reg  [7:0]          flags;
+reg [31:0]          vector_base;
+reg [31:0]          offset;
+reg [31:0]          irq_vector;
 reg                 quiet = 0;
+reg                 paused;
+reg [1:0]           CWFDD;
 
 // ============== alu components ==============
 reg  [31:0]         aluA;
@@ -117,7 +128,7 @@ reg  [1:0]          aluState;
 reg                 aluActive;
 
 alu                 alu0(
-    .opcode         (gr.OprOperator),
+    .opcode         (OprOperator),
     .a              (aluA),
     .b              (aluB),
     .aluActive      (aluActive),
@@ -126,10 +137,10 @@ alu                 alu0(
 );
 
 // ============== temporaly ==============
-`define         STR_INM  "INME"                 // operation cpm.mode
-`define         STR_REG  "REGI"                 // register cpm.mode
-`define         STR_STK  "STCK"                 // stack cpm.mode
-`define         STR_UNK  "????"                 // unknown cpm.mode
+`define         STR_INM  "INME"                 // operation mode
+`define         STR_REG  "REGI"                 // register mode
+`define         STR_STK  "STCK"                 // stack mode
+`define         STR_UNK  "????"                 // unknown mode
 integer i;
 
 // ============== function for inms  ==============
@@ -139,9 +150,9 @@ integer i;
 // ------------------------------------------------
 function [31:0] readINM; input [7:0] bytesLen; input [31:0] baseAddr; begin
     case (bytesLen)
-        1: readINM = cpg.memory[baseAddr];
-        2: readINM = {cpg.memory[baseAddr],cpg.memory[baseAddr + 1]};
-        4: readINM = {cpg.memory[baseAddr],cpg.memory[baseAddr + 1],cpg.memory[baseAddr + 2],cpg.memory[baseAddr + 3]
+        1: readINM = memory[baseAddr];
+        2: readINM = {memory[baseAddr],memory[baseAddr + 1]};
+        4: readINM = {memory[baseAddr],memory[baseAddr + 1],memory[baseAddr + 2],memory[baseAddr + 3]
         };
         default: readINM = 0;
     endcase
@@ -169,37 +180,41 @@ end endfunction
 // |                                              |
 // | #FASTER #STARTER                             |
 // ------------------------------------------------
-function [31:0] operateInstant; input [3:0] modeOpr; input [7:0] bytesLen; begin
+task operateInstant; 
+input [3:0] modeOpr; 
+input [7:0] bytesLen; 
+output [31:0] val;
+begin
     case (modeOpr)
         4'h0: begin
-            operateInstant = readINM(bytesLen, cpg.pc);
-            cpg.pc = cpg.pc + bytesLen;
+            val = readINM(bytesLen, pc);
+            pc = pc + bytesLen;
         end
         4'h1: begin
-            gr.a = cpg.memory[cpg.pc];
-            cpg.pc = cpg.pc + 1;
+            a = memory[pc];
+            pc = pc + 1;
 
-            case (gr.a)
-                0: operateInstant = gr.result;
-                1: operateInstant = gr.valueRegister;
-                2: operateInstant = gr.currentPtrAddrs;
-                default: operateInstant = 0;
+            case (a)
+                0: val = result;
+                1: val = valueRegister;
+                2: val = currentPtrAddrs;
+                default: val = 0;
             endcase
         end
         4'h2: begin
-            operateInstant = readINM(bytesLen, cpg.sp);
-            cpg.sp = cpg.sp + bytesLen;
+            val = readINM(bytesLen, sp);
+            sp = sp + bytesLen;
         end
-        default: begin while (1); end
+        default: val = 0;
     endcase
-end endfunction
+end endtask
 
 task alu_check; begin
     if (aluState == 1) begin
         aluState = 2;
     end
     else if (aluState == 2) begin
-        gr.result = aluResult;
+        result = aluResult;
         aluActive = 0;
         aluState = 0;
     end
@@ -212,89 +227,103 @@ task alu_reset; begin
 end endtask
 
 task general_reset; begin
-    cpg.pc <= {
-        cpg.memory[0],
-        cpg.memory[1],
-        cpg.memory[2],
-        cpg.memory[3]
+    pc <= {
+        memory[0],
+        memory[1],
+        memory[2],
+        memory[3]
     };
-    cpg.sp = 63000;
-    cpm.ir = 0;
-    cpm.paused = 0;
+    sp = 63000;
+    ir = 0;
+    paused = 0;
+    result = 0;
 end endtask
 task save_dir; begin
-    cpg.sp = cpg.sp - 4;
-    cpg.memory[cpg.sp]     = cpg.pc[31:24];
-    cpg.memory[cpg.sp + 1] = cpg.pc[23:16];
-    cpg.memory[cpg.sp + 2] = cpg.pc[15:8];
-    cpg.memory[cpg.sp + 3] = cpg.pc[7:0];
+    sp = sp - 4;
+    memory[sp]     = pc[31:24];
+    memory[sp + 1] = pc[23:16];
+    memory[sp + 2] = pc[15:8];
+    memory[sp + 3] = pc[7:0];
 end endtask
 
 task ex_lpx; begin
-    cpm.mode = cpg.memory[cpg.pc];
-    gr.OprOperationBytes = cpg.memory[cpg.pc + 1];
-    cpg.pc = cpg.pc + 2;
+    mode = memory[pc];
+    OprOperationBytes = memory[pc + 1];
+    pc = pc + 2;
 
     if (!quiet) $write("ANONYMUS");
-    if ((gr.OprOperationBytes * 8) < 10) begin
-        if (!quiet) $write("%0d ", gr.OprOperationBytes * 8);
+    if ((OprOperationBytes * 8) < 10) begin
+        if (!quiet) $write("%0d ", OprOperationBytes * 8);
     end
     else begin
-        if (!quiet) $write("%0d", gr.OprOperationBytes * 8);
+        if (!quiet) $write("%0d", OprOperationBytes * 8);
     end
-    if (!quiet) $write(" LPX %s", castToDebug(cpm.mode[3:0]));
-    gr.a = operateInstant(cpm.mode[3:0],gr.OprOperationBytes);
-    if (!quiet) $write(" %0d\n", gr.a);
+    if (!quiet) $write(" LPX %s", castToDebug(mode[3:0]));
+    operateInstant(mode[3:0],OprOperationBytes,a);
+    if (!quiet) $write(" %0d\n", a);
 
-    gr.currentPtrAddrs = gr.a;
+    currentPtrAddrs = a;
+end endtask
+
+task write_mem_byte; 
+input [31:0]    addr;
+input [7:0]     val;
+begin
+    if (addr > 63999) begin
+        CWFDD = 2;
+        dev_wrt_en   = 1;
+        dev_wrt_addr = addr - 64000;
+        dev_wrt_val  = val;
+    end
+    memory[addr] = val;
 end endtask
 task ex_ldx; begin
     if (!quiet) $display("REGISTER8  LDX");
-    gr.valueRegister = cpg.memory[gr.currentPtrAddrs];
+    valueRegister = memory[currentPtrAddrs];
 end endtask
 task ex_pus; begin
-    cpm.mode = cpg.memory[cpg.pc];
-    gr.OprOperationBytes = cpg.memory[cpg.pc + 1];
-    cpg.pc = cpg.pc + 2;
+    mode = memory[pc];
+    OprOperationBytes = memory[pc + 1];
+    pc = pc + 2;
 
-    gr.a = operateInstant(cpm.mode[3:0],gr.OprOperationBytes);
+    operateInstant(mode[3:0],OprOperationBytes,a);
 
-    if (!quiet) $display("ANONYMUS   PUS %s %0d", castToDebug(cpm.mode[3:0]), gr.a);
+    if (!quiet) $display("ANONYMUS   PUS %s %0d", castToDebug(mode[3:0]), a);
 
-    for (i = 0; i < gr.OprOperationBytes; i = i + 1) begin
-        cpg.sp = cpg.sp - 1;
-        cpg.memory[cpg.sp] = gr.a >> (8*i);
+    for (i = 0; i < OprOperationBytes; i = i + 1) begin
+        sp = sp - 1;
+        memory[sp] = a >> (8*i);
     end
 end endtask
 task ex_opr; begin
-    // fetch cpm.mode
-    gr.OprOperator = cpg.memory[cpg.pc];           // operator
-    gr.OprOperationBytes = cpg.memory[cpg.pc + 1]; // operation bytes len
-    cpm.operationModes = cpg.memory[cpg.pc + 2];    // operation cpm.mode
-    cpg.pc = cpg.pc + 3;                        // increment cpg.pc
+    // fetch mode
+    OprOperator = memory[pc];           // operator
+    OprOperationBytes = memory[pc + 1]; // operation bytes len
+    operationModes = memory[pc + 2];    // operation mode
+    pc = pc + 3;                        // increment pc
 
     if (!quiet) $write("ANONYMUS");
-    if ((gr.OprOperationBytes * 8) < 10) begin
-        if (!quiet) $write("%0d ", gr.OprOperationBytes * 8);
+    if ((OprOperationBytes * 8) < 10) begin
+        if (!quiet) $write("%0d ", OprOperationBytes * 8);
     end
     else begin
-        if (!quiet) $write("%0d", gr.OprOperationBytes * 8);
+        if (!quiet) $write("%0d", OprOperationBytes * 8);
     end
     if (!quiet) $write(" OPR ");
 
-    if (!quiet) $write("%s ", castToDebug(cpm.operationModes[7:4]));
-    if (!quiet) $write("%s %0d\n", castToDebug(cpm.operationModes[3:0]), gr.OprOperator);
+    if (!quiet) $write("%s ", castToDebug(operationModes[7:4]));
+    if (!quiet) $write("%s %0d\n", castToDebug(operationModes[3:0]), OprOperator);
 
-    if (gr.OprOperator != 8'h08) gr.a = operateInstant(cpm.operationModes[7:4],gr.OprOperationBytes);
-    if (gr.OprOperator != 8'h08) gr.b = operateInstant(cpm.operationModes[3:0],gr.OprOperationBytes);
+    if (OprOperator != 8'h08) operateInstant(operationModes[7:4],OprOperationBytes, a);
+    if (OprOperator != 8'h08) operateInstant(operationModes[3:0],OprOperationBytes, b);
 
-    case (gr.OprOperator) 
+    case (OprOperator) 
         8'h08: begin
-            gr.result = readINM(gr.OprOperationBytes, gr.currentPtrAddrs); 
+            result = readINM(OprOperationBytes, currentPtrAddrs); 
         end
         default: begin
-            aluA = gr.a;
-            aluB = gr.b;
+            aluA = a;
+            aluB = b;
             aluActive = 1;
             aluState = 1;
         end
@@ -302,100 +331,100 @@ task ex_opr; begin
 
 end endtask
 task ex_cmp; begin
-    // fetch cpm.mode
-    gr.OprOperationBytes = cpg.memory[cpg.pc]; // operation bytes len
-    cpm.operationModes = cpg.memory[cpg.pc + 1];    // operation cpm.mode
-    cpg.pc = cpg.pc + 2;                        // increment cpg.pc
+    // fetch mode
+    OprOperationBytes = memory[pc]; // operation bytes len
+    operationModes = memory[pc + 1];    // operation mode
+    pc = pc + 2;                        // increment pc
 
     if (!quiet) $write("ANONYMUS");
-    if ((gr.OprOperationBytes * 8) < 10) begin
-        if (!quiet) $write("%0d ", gr.OprOperationBytes * 8);
+    if ((OprOperationBytes * 8) < 10) begin
+        if (!quiet) $write("%0d ", OprOperationBytes * 8);
     end
     else begin
-        if (!quiet) $write("%0d", gr.OprOperationBytes * 8);
+        if (!quiet) $write("%0d", OprOperationBytes * 8);
     end
     if (!quiet) $write(" CMP ");
 
-    if (!quiet) $write("%s ", castToDebug(cpm.operationModes[7:4]));
-    if (!quiet) $write("%s\n", castToDebug(cpm.operationModes[3:0]));
+    if (!quiet) $write("%s ", castToDebug(operationModes[7:4]));
+    if (!quiet) $write("%s\n", castToDebug(operationModes[3:0]));
 
-    gr.a = operateInstant(cpm.operationModes[7:4],gr.OprOperationBytes);
-    gr.b = operateInstant(cpm.operationModes[3:0],gr.OprOperationBytes);
+    operateInstant(operationModes[7:4],OprOperationBytes,a);
+    operateInstant(operationModes[3:0],OprOperationBytes,b);
 
-    gr.result = gr.a - gr.b;
-    cpm.flags = 0;
-    if (gr.result == 0) cpm.flags[0] = 1;
-    if (gr.result[31] == 1) cpm.flags[1] = 1;
-    if (gr.result > 0 && gr.result[31] == 0) cpm.flags[2] = 1;
+    result = a - b;
+    flags = 0;
+    if (result == 0) flags[0] = 1;
+    if (result[31] == 1) flags[1] = 1;
+    if (result > 0 && result[31] == 0) flags[2] = 1;
 end endtask
 task ex_jmp; begin
-    // fetch cpm.mode
-    gr.OprOperationBytes = cpg.memory[cpg.pc];     // operation bytes len
-    cpm.operationModes = cpg.memory[cpg.pc + 1];    // operation cpm.mode
-    cpm.mode = cpg.memory[cpg.pc + 2];              // jmp template
-    cpg.pc = cpg.pc + 3;                        // increment cpg.pc
+    // fetch mode
+    OprOperationBytes = memory[pc];     // operation bytes len
+    operationModes = memory[pc + 1];    // operation mode
+    mode = memory[pc + 2];              // jmp template
+    pc = pc + 3;                        // increment pc
 
     if (!quiet) $write("ANONYMUS");
-    if ((gr.OprOperationBytes * 8) < 10) begin
-        if (!quiet) $write("%0d ", gr.OprOperationBytes * 8);
+    if ((OprOperationBytes * 8) < 10) begin
+        if (!quiet) $write("%0d ", OprOperationBytes * 8);
     end 
     else begin
-        if (!quiet) $write("%0d", gr.OprOperationBytes * 8);
+        if (!quiet) $write("%0d", OprOperationBytes * 8);
     end
     if (!quiet) $write(" JMP ");
-    if (!quiet) $write("%s ", castToDebug(cpm.operationModes[3:0]));
+    if (!quiet) $write("%s ", castToDebug(operationModes[3:0]));
 
-    gr.a = operateInstant(cpm.operationModes[3:0],gr.OprOperationBytes);
-    if (!quiet) $write("%0d\n", gr.a);
-    case (cpm.mode)
+    operateInstant(operationModes[3:0],OprOperationBytes,a);
+    if (!quiet) $write("%0d\n", a);
+    case (mode)
         // normal jmp 
-        8'h00: cpg.pc = gr.a;
+        8'h00: pc = a;
         // if equal jmp
-        8'h01: begin if (cpm.flags[0]) cpg.pc = gr.a;end
+        8'h01: begin if (flags[0]) pc = a;end
         // if less jmp
-        8'h02: begin if (cpm.flags[1]) cpg.pc = gr.a;end
+        8'h02: begin if (flags[1]) pc = a;end
         // if greater jmp
-        8'h03: begin if (cpm.flags[2]) cpg.pc = gr.a;end
+        8'h03: begin if (flags[2]) pc = a;end
         // call
-        8'h04: begin save_dir(); cpg.pc = gr.a; end
+        8'h04: begin save_dir(); pc = a; end
     endcase
 end endtask
 task ex_sdx; begin
-    cpm.mode = cpg.memory[cpg.pc];
-    gr.OprOperationBytes = cpg.memory[cpg.pc + 1];
-    cpg.pc = cpg.pc + 2;
+    mode = memory[pc];
+    OprOperationBytes = memory[pc + 1];
+    pc = pc + 2;
 
-    gr.a = operateInstant(cpm.mode[3:0],gr.OprOperationBytes);
+    operateInstant(mode[3:0],OprOperationBytes, a);
     if (!quiet) $write("ANONYMUS");
-    if ((gr.OprOperationBytes * 8) < 10) begin
-        if (!quiet) $write("%0d ", gr.OprOperationBytes * 8);
+    if ((OprOperationBytes * 8) < 10) begin
+        if (!quiet) $write("%0d ", OprOperationBytes * 8);
     end 
     else begin
-        if (!quiet) $write("%0d", gr.OprOperationBytes * 8);
+        if (!quiet) $write("%0d", OprOperationBytes * 8);
     end 
-    if (!quiet) $write(" SDX %s %0d\n", castToDebug(cpm.mode[3:0]), gr.a);
+    if (!quiet) $write(" SDX %s %0d\n", castToDebug(mode[3:0]), a);
 
-    for (i = 0; i < gr.OprOperationBytes; i = i + 1) begin
-        cpg.memory[gr.currentPtrAddrs + i] = gr.a >> (8*i);
+    for (i = 0; i < OprOperationBytes; i = i + 1) begin
+        write_mem_byte(currentPtrAddrs + i, a >> (8*i));
     end
 end endtask
 
 task irq_check; begin
-    if (!quiet) $write("%d (%8x) ",cpg.pc - 1, cpg.pc);
+    if (!quiet) $write("%d (%8x) ",pc - 1, pc);
     if (!quiet) $display("HARDWARE   IRQ %0d %0d", irq_addr, irq_data);
-    cpm.paused = 0;
+    paused = 0;
     irq_ack <= 1; 
     save_dir();
-    gr.valueRegister = irq_data;
-    cpv.vector_base = 4;
-    cpv.offset = irq_addr * 4;
-    cpv.irq_vector = {
-        cpg.memory[cpv.vector_base + cpv.offset],
-        cpg.memory[cpv.vector_base + cpv.offset + 1],
-        cpg.memory[cpv.vector_base + cpv.offset + 2],
-        cpg.memory[cpv.vector_base + cpv.offset + 3]
+    valueRegister = irq_data;
+    vector_base = 4;
+    offset = irq_addr * 4;
+    irq_vector = {
+        memory[vector_base + offset],
+        memory[vector_base + offset + 1],
+        memory[vector_base + offset + 2],
+        memory[vector_base + offset + 3]
     };
-    cpg.pc = cpv.irq_vector;
+    pc = irq_vector;
 end endtask
 
 // ============== function for clock ==============
@@ -409,37 +438,60 @@ always @(posedge clk) begin
     if (reset) begin        
         general_reset();
         alu_reset();
+        CWFDD = 0;
     // tick of click
     end else begin
+        if (CWFDD == 1) begin
+            dev_wrt_en = 0;
+            CWFDD = CWFDD - 1;
+        end
+        else if (CWFDD != 0) begin
+            CWFDD = CWFDD - 1;
+        end
+        
+        if (sp < 50000) begin
+            if (!quiet) $display("HARDWARE   STACK OVERFLOW %0d %0d", irq_addr, irq_data);
+            general_reset();
+            alu_reset();
+        end
+
+        if (mem_wrt_bool) begin
+            memory[mem_wrt_addr] <= mem_wrt_val;
+        end
+
+        if (mem_rdr_bool) begin 
+            mem_rdr_val <= memory[mem_rdr_addr]; 
+        end
+
         // check alu
         alu_check();
 
         if (irq && !irq_ack) begin
             irq_check();
-        end else if (!cpm.paused && !aluState) begin
+        end else if (!paused && !aluState) begin
         irq_ack <= 0;
 
         // fetch instruction
-        cpm.ir = cpg.memory[cpg.pc];                           // current instruction
-        cpg.pc = cpg.pc + 1;                               // increment program counter
+        ir = memory[pc];                           // current instruction
+        pc = pc + 1;                               // increment program counter
 
-        if (!quiet) $write("%d (%8x) ",cpg.pc - 1, cpg.pc);
-        case (cpm.ir)
+        if (!quiet) $write("%d (%8x) ",pc - 1, pc);
+        case (ir)
             // LPX = Load Pointer eXpretion
             8'h01: ex_lpx();
-            // LDX = Load From cpg.memory To Data RegiXter (Data Register = valueRegister beta name)
+            // LDX = Load From memory To Data RegiXter (Data Register = valueRegister beta name)
             8'h02: ex_ldx();
             // PUS = Push Unity or regiSter
             8'h03: ex_pus();
             // OPR = Operation Propurse with Result
             8'h04: ex_opr();
             // HLT = Halt main Tread
-            8'h05: cpm.paused = 1;
+            8'h05: begin if (!quiet) $display("NULL0      HLT"); paused = 1; end
             // CMP = Compare Multi Parse
             8'h06: ex_cmp();
             // JMP = Jump Multi Templates
             8'h07: ex_jmp();
-            // SDX = Save Data RegiXters to cpg.memory
+            // SDX = Save Data RegiXters to memory
             8'h08: ex_sdx();
         endcase
     end

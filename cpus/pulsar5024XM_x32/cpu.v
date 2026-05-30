@@ -65,6 +65,8 @@ always @(posedge clk) begin
             8'h05: result = a & b;
             8'h06: result = a | b;
             8'h07: result = a ^ b;
+            8'h09: result = a << b;
+            8'h0A: result = a >> b;
             default: result = 0;
         endcase
     end
@@ -231,7 +233,7 @@ task general_reset; begin
         memory[2],
         memory[3]
     };
-    sp = 63000;
+    sp = 95000;
     ir = 0;
     paused = 0;
 end endtask
@@ -289,7 +291,10 @@ task ex_pus; begin
 
     for (i = 0; i < OprOperationBytes; i = i + 1) begin
         sp = sp - 1;
-        memory[sp] = a >> (8*i);
+    end
+
+    for (i = 0; i < OprOperationBytes; i = i + 1) begin
+        memory[sp+i] = a >> (8*(OprOperationBytes-1-i));
     end
 end endtask
 task ex_opr; begin

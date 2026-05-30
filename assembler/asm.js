@@ -320,6 +320,8 @@ export function AssembleLineWithoutContext(line, ctx, len=null) {
     else if (peek().value.toUpperCase() === 'AND') parseOperation(5);
     else if (peek().value.toUpperCase() === 'OR') parseOperation(6);
     else if (peek().value.toUpperCase() === 'XOR') parseOperation(7);
+    else if (peek().value.toUpperCase() === 'SHL') parseOperation(9);
+    else if (peek().value.toUpperCase() === 'SHR') parseOperation(10);
     else if (peek().value.toUpperCase() === 'ASSUME') {
       consume();
       expect('-');
