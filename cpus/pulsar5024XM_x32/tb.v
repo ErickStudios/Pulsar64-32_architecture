@@ -20,10 +20,11 @@ reg  [7:0]  ohman = 0;
 // ================= CASSETE READER =================
 reg         anull_all_fs0 = 0;
 reg  [15:0] fs0_sector_to_read = 0;
+reg  [15:0] fs0_mmfs_to_read = 0;
 reg  [15:0] fs0_byte_to_read = 0;
 reg  [3:0]  fs0_read_stage = 0;
 reg  [1:0]  fs0_status_lh = 0;
-reg  [15:0] fs0_byte_exactly = 0;
+reg  [31:0] fs0_byte_exactly = 0;
 
 // ================= SIMULATED VIDEO ADAPTER =================
 reg  [7:0]  pix_x;
@@ -59,7 +60,7 @@ assign mra = mwa;
 
 // ================= CASSETE DISK PROPERTYS =================
 reg  [3:0]  cassete_inserted = 1;
-reg  [7:0]  disk0_cassete [0:64000];
+reg  [7:0]  disk0_cassete [0:786432];
 
 // ================= CPU ASIGNATION IRQS =================
 reg         dev1_enable = 0;
@@ -251,6 +252,16 @@ always @(posedge clk) begin
         if (!uut.quiet) $display("%d (%8x) HARDWARE   FS0 READBF %0d",uut.pc - 1, uut.pc, fs0_sector_to_read);
       end
     end
+    else if (dev_wrt_en && dev_wrt_addr == 11) begin
+      if (fs0_status_lh == 0) begin
+        fs0_status_lh <= 1;
+        fs0_mmfs_to_read <= dev_wrt_val;
+      end
+      else if (fs0_status_lh == 1) begin
+        fs0_status_lh <= 0;
+        fs0_mmfs_to_read = (fs0_mmfs_to_read << 8) | dev_wrt_val;
+      end
+    end
     else if (anull_all_fs0) begin
         if (fs0_byte_to_read >= 511) begin
             anull_all_fs0 <= 0;
@@ -258,7 +269,7 @@ always @(posedge clk) begin
             fs0_read_stage <= 1;
         end
         else if (fs0_read_stage == 0) begin
-            fs0_byte_exactly = (fs0_sector_to_read * 512) + fs0_byte_to_read;
+            fs0_byte_exactly = (((fs0_mmfs_to_read * 512) + fs0_sector_to_read) * 512) + fs0_byte_to_read;
             modifier_01 <= 4;
             mwb <= 1;
             mwv <= disk0_cassete[fs0_byte_exactly];
@@ -321,7 +332,9 @@ end
 initial begin
     $display("pulsar5024XM_x32 chip debug");
     $readmemh("program.hex", uut.memory);
-    $readmemh("cassete.hex", disk0_cassete);
+    $readmemh("mmbootfs.hex", disk0_cassete, 0);
+    $readmemh("mmfs1.hex", disk0_cassete, 262144);
+    $readmemh("mmfs2.hex", disk0_cassete, 524120);
 
     //uut.quiet = 1;
 

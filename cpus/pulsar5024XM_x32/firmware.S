@@ -89,12 +89,15 @@ _init:
 
 ; ===========================================
 ; cuando el firmware espera a cargar el sector
-; para bootear en el
+; para bootear en el mmfs1
 ;
 C1:
     Lea-Dword       Px
     Jmp-Word-Clasic C2
 C2:
+    Lea-Dword       cassete_selected_mmfs   ; la direccion
+    Out-Byte        0                       ; parte alta
+    Out-Byte        0                       ; mmfs0
     Lea-Dword       cassete_external_cmd    ; comando
     Out-Byte        CASSETE_READ_SECTA      ; lee un sector
     Lea-Dword       cassete_sector_read_cmd ; la direccion
@@ -411,3 +414,5 @@ com1_cmd_mmio:
                     Byte 0   ; nuevo MMIO del com1
 cassete_sector_read_cmd:
                     Byte 0   ; escribir 2 veces para completar el word
+cassete_selected_mmfs:
+                    Byte 0   ; disco seleccionado , start = (fs * 255) + sector

@@ -375,6 +375,7 @@ always @(posedge clk) begin
         general_reset();
         alu_reset();
         CWFDD = 0;
+        CWFDM = 0;
     // tick of click
     end else begin
         if (CWFDD == 1) begin
@@ -392,10 +393,12 @@ always @(posedge clk) begin
         else if (CWFDM != 0) begin
             CWFDM = CWFDM - 1;
         end
-                if (sp < 50000) begin
+        if (sp < 50000) begin
             if (!quiet) $display("HARDWARE   STACK OVERFLOW %0d %0d", irq_addr, irq_data);
             general_reset();
             alu_reset();
+            CWFDD = 0;
+            CWFDM = 0;
         end
 
         if (mem_wrt_bool) begin

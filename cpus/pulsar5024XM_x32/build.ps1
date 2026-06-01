@@ -1,6 +1,6 @@
 # compilacion
 node ../../assembler/pulsarAsm.js firmware.S program.hex
-node ../../assembler/pulsarAsm.js cassete.asm cassete.hex
+node ../../assembler/pulsarAsm.js cassete.asm mmbootfs.hex
 
 # compilar verilog
 iverilog -o cpu cpu.v tb.v
