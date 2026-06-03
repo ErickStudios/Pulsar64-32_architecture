@@ -16,6 +16,7 @@ reg  [7:0]  selectec_dev;
 reg  [7:0]  firmware_status = 0;
 reg  [7:0]  modifier_01 = 0;
 reg  [7:0]  ohman = 0;
+reg         debug_show_events = 0;
 
 // ================= CASSETE READER =================
 reg         anull_all_fs0 = 0;
@@ -224,7 +225,7 @@ always @(posedge clk) begin
     end
 
     if (dev_wrt_en && dev_wrt_addr == 5) begin
-        if (!uut.quiet) $display("%d (%8x) HARDWARE   CM1 PUTPIX %0d %0d %0d",uut.pc - 1, uut.pc, pix_x, pix_y, dev_wrt_val);
+        if (!uut.quiet | debug_show_events) $display("%d (%8x) HARDWARE   CM1 PUTPIX %0d %0d %0d",uut.pc - 1, uut.pc, pix_x, pix_y, dev_wrt_val);
     end
     else if (dev_wrt_en && dev_wrt_addr == 6) pix_x = dev_wrt_val;
     else if (dev_wrt_en && dev_wrt_addr == 7) pix_y = dev_wrt_val;
@@ -235,7 +236,7 @@ always @(posedge clk) begin
         end
         else begin     
             if (com1_mode == 1) begin 
-                if (!uut.quiet) $display("%d (%8x) HARDWARE   CM1 PUTCHR %0d",uut.pc - 1, uut.pc, dev_wrt_val);
+                if (!uut.quiet | debug_show_events) $display("%d (%8x) HARDWARE   CM1 PUTCHR %0d",uut.pc - 1, uut.pc, dev_wrt_val);
             end
         end
     end
@@ -249,7 +250,7 @@ always @(posedge clk) begin
         fs0_sector_to_read = (fs0_sector_to_read << 8) | dev_wrt_val;
         anull_all_fs0 <= 1;
         fs0_byte_to_read <= 0;
-        if (!uut.quiet) $display("%d (%8x) HARDWARE   FS0 READBF %0d",uut.pc - 1, uut.pc, fs0_sector_to_read);
+        if (!uut.quiet | debug_show_events) $display("%d (%8x) HARDWARE   FS0 READBF %0d",uut.pc - 1, uut.pc, fs0_sector_to_read);
       end
     end
     else if (dev_wrt_en && dev_wrt_addr == 11) begin
@@ -336,7 +337,8 @@ initial begin
     $readmemh("mmfs1.hex", disk0_cassete, 262144);
     $readmemh("mmfs2.hex", disk0_cassete, 524120);
 
-    //uut.quiet = 1;
+    uut.quiet = 1;
+    debug_show_events = 1;
 
     #10 reset = 0;
 
@@ -361,6 +363,7 @@ initial begin
     #2  dev4_enable = 0;*/
 
     #1000000 $finish;
+
 end
 
 endmodule

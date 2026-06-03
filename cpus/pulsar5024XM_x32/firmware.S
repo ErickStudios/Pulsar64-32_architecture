@@ -47,6 +47,8 @@ Assume-Fill         0x1F0
 _vectors:
     Word        put_char ; coloca un caracter
     Word        put_msg ; pone un mensaje
+    Word        memcpy  ; copia memoria
+    Word        readsec ; lee un sector
 
 ; ===========================================
 ;           STAGES FIRMWARE
@@ -165,6 +167,103 @@ put_msg_loop:
 put_msg_end:
     Lea-Dword       Sp          ; lee la dword
     Jmp-Dword-Clasic Sp         ; regresar
+
+; ===========================================
+;           MEMCPY FUNCTION
+;
+; copia datos de memoria a una ubicacion especifica
+;
+; ===========================================
+
+memcpy:
+    Push-Dword      Px
+    Push-Dword      Out
+M_LOOP:
+M1:
+    Lea-Dword       memcpy_src  ; source
+    Mov-Dword                   ; obtener dword
+    Lea-Dword       Out         ; source real
+    Mov-Byte                    ; obtener byte
+    Push-Dword      Out         ; guardar out
+    Lea-Dword       memcpy_src  ; source
+    Mov-Dword                   ; obtener dword
+    Push-Dword      Out         ; poner out
+    Add-Dword-Sp-Inm 1          ; sumarle out
+    Out-Dword       Out         ; ponerlo
+    Add-Dword-Sp-Inm 0          ; restaurar out
+M2:
+    Push-Dword      Out         ; guardar out
+    Lea-Dword       memcpy_dst  ; destino
+    Mov-Dword                   ; obtener dword
+    Lea-Dword       Out         ; destino real
+    Add-Dword-Sp-Inm 0          ; restaurar out
+    Out-Byte        Out         ; pegar byte
+    Push-Dword      Out         ; guardar out
+    Lea-Dword       memcpy_dst  ; destino
+    Mov-Dword                   ; obtener dword
+    Push-Dword      Out         ; poner out
+    Add-Dword-Sp-Inm 1          ; sumarle out
+    Out-Dword       Out         ; ponerlo
+    Add-Dword-Sp-Inm 0          ; restaurar out
+M3:
+    Push-Dword      Out         ; guardar out
+    Lea-Dword       memcpy_siz  ; destino
+    Mov-Dword                   ; obtener dword
+    Push-Dword      1           ; 1
+    Push-Dword      Out         ; poner out
+    Sub-Dword-Sp-Sp             ; restarle a out
+    C33:
+    Out-Dword       Out         ; ponerlo
+    Add-Dword-Sp-Inm 0          ; restaurar out
+    Lea-Dword       memcpy_siz  ; destino
+    Mov-Dword                   ; obtener dword
+    Push-Dword      Out         ; poner el out
+    Cmp-Dword-Inm-Sp 0          ; compara con terminador
+    Jmp-Word-Zero   M4          ; si es igual terminar
+    Jmp-Word-Clasic M_LOOP      ; loopear
+M4:
+    Add-Dword-Sp-Inm 0          ; recuperar out
+    Lea-Dword       Sp          ; recuperar px
+    Jmp-Dword-Clasic Sp         ; retorno
+
+; ===========================================
+;           READ SECTOR FUNCTION
+;
+; lee un sector desde un sector especifico
+;
+; ===========================================
+
+readsec:
+    Push-Dword      Px
+    Push-Dword      Out
+RS2:
+    Lea-Dword       cassete_readed_sector_finish ; la direccion
+    Out-Byte        0                       ; byte 0
+    Lea-Dword       cassete_external_cmd    ; comando
+    Out-Byte        CASSETE_READ_SECTA      ; lee un sector
+    Lea-Dword       cassete_sector_read_cmd ; la direccion
+    Push-Dword      Px                      ; guardar px
+    Lea-Dword       llbasect_sect_low       ; el alto
+    Mov-Byte                                ; obtener byte
+    Lea-Dword       Sp                      ; recuperar px
+    Out-Byte        Out                     ; parte alta
+    Push-Dword      Px                      ; guardar px
+    Lea-Dword       llbasect_sect_high      ; el bajo
+    Mov-Byte                                ; obtener byte
+    Lea-Dword       Sp                      ; recuperar px
+    Out-Byte        Out                     ; parte baja
+RS3:
+    Hlt                         ; espera
+    Lea-Dword       cassete_readed_sector_finish ; la direccion
+    Mov-Byte                    ; mover byte
+    Push-Byte       Out         ; leer
+    Cmp-Byte-Inm-Sp 1           ; verificar
+    Jmp-Word-Zero   RS4         ; se logro leer
+    Jmp-Word-Clasic RS3         ; salta
+RS4:
+    Add-Dword-Sp-Inm 0          ; recuperar out
+    Lea-Dword       Sp          ; recuperar px
+    Jmp-Dword-Clasic Sp         ; retorno
 
 ; ===========================================
 ;           FUNC BUTTONS
@@ -372,14 +471,44 @@ cassete_fnc_end:
     Lea-Dword       Sp
     Jmp-Dword-Clasic Sp
 
-Assume-Fill 0x7FFF
+Assume-Fill 0x7200
 
-firmware_on_flag:
-    Byte     0
+; ===========================================
+;           DATA SECTION
+;
+; seccion de datos de los parametros de funciones
+; del firmware
+;
+; ===========================================
+
+; ===========================================
+; datos de memcpy
+;
+memcpy_src:
+    Dword           0
+memcpy_dst:
+    Dword           0
+memcpy_siz:
+    Dword           0
+
+Assume-Fill 0x720D
+
+; ===========================================
+; datos de load sector
+;
+llbasect_sect_low:
+    Byte            0
+llbasect_sect_high:
+    Byte            0
+
+Assume-Fill 0x7FFF
 
 old_pix_x:
     Byte     0
 old_pix_y:
+    Byte     0
+
+firmware_on_flag:
     Byte     0
 
 Assume-Fill 64000

@@ -111,6 +111,24 @@ export function AssembleLineWithoutContext(line, ctx, len=null) {
     }
   }
   function parsePrimary() {
+    if (peek().value === '[') {
+      consume();
+      let v1 = parsePrimary();
+      if (peek().value.toUpperCase() === 'IN') {
+        consume();
+        let v2 = parsePrimary();
+        let result = v2.value + (v1.value - ctx.orgIn);
+        expect("]");
+        return ({ type: 'inm', value: result });
+      }
+      else if (peek().value.toUpperCase() === 'OUT') {
+        consume();
+        let v2 = parsePrimary();
+        let result = (v1.value - v2.value) + ctx.orgIn;
+        expect("]");
+        return ({ type: 'inm', value: result });
+      }
+    }
     if (typeof peek().value === 'number') return ({ type: 'inm', value: consume().value });
     if (peek().value.toUpperCase() === 'SP') {
       consume();

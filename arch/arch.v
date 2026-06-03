@@ -341,7 +341,7 @@ task ex_sdx; begin
     if (!quiet) $write(" SDX %s %0d\n", castToDebug(mode[3:0]), a);
 
     for (i = 0; i < OprOperationBytes; i = i + 1) begin
-        write_mem_byte(currentPtrAddrs + i, a >> (8*i));
+        write_mem_byte(currentPtrAddrs + i, (a >> (8 * (OprOperationBytes - 1 - i))) & 8'hFF);
     end
 end endtask
 
