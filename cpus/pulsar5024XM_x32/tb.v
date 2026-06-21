@@ -236,7 +236,7 @@ always @(posedge clk) begin
             MA3302_KY1_Ki = kstatbooli;
             MA3302_KY1_Ks = kstatbuff[kstatbooli];
             kstatbooli = 44;
-            $display("%d (%8x) HARDWARE   KY1 KPRESS %0d", uut.pc - 1, uut.pc, kstatbooli);
+            $display("%d (%8x) HARDWARE   KY1 KPRESS %0d", uut.pc - 1, uut.pc, MA3302_KY1_Ki);
         end
     end
 end
@@ -350,6 +350,7 @@ always @(posedge clk) begin
                 MA3302_enable <= 1;
                 MA3302_stags = 0;
                 MA3302_stag = 0;
+                //uut.quiet = 0;
             end
           end
         endcase

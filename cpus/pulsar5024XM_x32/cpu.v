@@ -223,34 +223,35 @@ always @(posedge clk) begin
                     result = {fpu_r_sig, fpu_r_exp, fpu_r_mat};
                 end
             end
-        8'h0E: begin
-            if (b[30:0] == 31'b0) begin
-                result = 32'h7FC00000;
-            end else if (a[30:0] == 31'b0) begin
-                result = 32'b0;
-            end else begin
-                fpu_a_sig = a[31];
-                fpu_a_exp = a[30:23];
-                fpu_a_mat = a[22:0];
+            8'h0E: begin
+                if (b[30:0] == 31'b0) begin
+                    result = 32'h7FC00000;
+                end else if (a[30:0] == 31'b0) begin
+                    result = 32'b0;
+                end else begin
+                    fpu_a_sig = a[31];
+                    fpu_a_exp = a[30:23];
+                    fpu_a_mat = a[22:0];
 
-                fpu_b_sig = b[31];
-                fpu_b_exp = b[30:23];
-                fpu_b_mat = b[22:0];
+                    fpu_b_sig = b[31];
+                    fpu_b_exp = b[30:23];
+                    fpu_b_mat = b[22:0];
 
-                fpu_r_sig = fpu_a_sig ^ fpu_b_sig;
-                fpu_r_exp = (fpu_a_exp - fpu_b_exp) + 8'd127;
+                    fpu_r_sig = fpu_a_sig ^ fpu_b_sig;
+                    fpu_r_exp = (fpu_a_exp - fpu_b_exp) + 8'd127;
 
-                div_mat = ({1'b1, fpu_a_mat} << 23) / {1'b1, fpu_b_mat};
+                    div_mat = ({1'b1, fpu_a_mat} << 23) / {1'b1, fpu_b_mat};
 
-                if (div_mat[23] == 0) begin
-                    div_mat = div_mat << 1;
-                    fpu_r_exp = fpu_r_exp - 1;
+                    if (div_mat[23] == 0) begin
+                        div_mat = div_mat << 1;
+                        fpu_r_exp = fpu_r_exp - 1;
+                    end
+
+                    fpu_r_mat = div_mat[22:0];
+                    result = {fpu_r_sig, fpu_r_exp, fpu_r_mat};
                 end
-
-                fpu_r_mat = div_mat[22:0];
-                result = {fpu_r_sig, fpu_r_exp, fpu_r_mat};
             end
-        end
+            8'h0F: result = a % b;
             default: result = 0;
         endcase
     end
@@ -550,10 +551,10 @@ task ex_cmp; begin
     if (!quiet) $write(" CMP ");
 
     if (!quiet) $write("%s ", castToDebug(operationModes[7:4]));
-    if (!quiet) $write("%s\n", castToDebug(operationModes[3:0]));
-
+    if (!quiet) $write("%s", castToDebug(operationModes[3:0]));
     operateInstant(operationModes[7:4],OprOperationBytes,a);
     operateInstant(operationModes[3:0],OprOperationBytes,b);
+    if (!quiet) $write(" %0d %0d\n", a,b);
 
     result = a - b;
     flags = 0;

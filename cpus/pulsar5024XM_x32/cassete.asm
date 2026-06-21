@@ -83,7 +83,15 @@ Stage2Code:
     Ror-Byte            Dx, 70h         ; Y
     Int-Byte            10h             ; el int
 
+LOOP:
     Hlt 
+    Int-Byte            16h             ; la int del teclado
+
+    Ror-Byte            Ax, 0Eh         ; el putchar
+    Ror-Byte            Bx, Ah         ; el caracter
+    Int-Byte            10h             ; del display
+    
+    Jmp-Dword-Clasic    [024000h segment Stage2Sector:LOOP] ; saltar
 
 ; =====================================
 ;       SRC/IMG/SPLASHLOGO.FD

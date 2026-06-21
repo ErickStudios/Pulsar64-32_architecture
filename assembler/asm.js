@@ -257,8 +257,9 @@ export function AssembleLineWithoutContext(line, ctx, len=null) {
       }
       return false;
     }
-    if (casterA(operand1)) expect(',');
-    casterA(operand2);
+    let a0 = casterA(operand1);
+    if (a0 && operand2.type !== 'stack') expect(',');
+    let a1 = casterA(operand2);
   }
   function parseIdent(value) {
     if (typeof value === 'number') return value;
@@ -441,6 +442,7 @@ export function AssembleLineWithoutContext(line, ctx, len=null) {
     else if (peek().value.toUpperCase() === 'XOR') parseOperation(7);
     else if (peek().value.toUpperCase() === 'SHL') parseOperation(9);
     else if (peek().value.toUpperCase() === 'SHR') parseOperation(10);
+    else if (peek().value.toUpperCase() === 'MOD') parseOperation(0xF);
     else if (peek().value.toUpperCase() === 'ASSUME') {
       consume();
       expect('-');
@@ -468,7 +470,8 @@ export function AssembleLineWithoutContext(line, ctx, len=null) {
     }
     else if (peek().value.toUpperCase() === 'ALIGN') {
       consume();
-      let alignTo = consume().value;
+      let primarys = parseIdent(parsePrimary().value);
+      let alignTo = primarys;
       let bytesfill = (alignTo - (len % alignTo)) % alignTo;
       result.push(...Array(bytesfill).fill(0));
     }

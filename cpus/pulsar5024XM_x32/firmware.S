@@ -47,7 +47,9 @@ _devices_vector:
     Dword           DiskServices ; servicios de disquete
     Dword           memcpy  ; memory copping para copiar un bloque de memoria a otro
     Dword           _init   ; reset the pc para reiniciar la pc
-    Dword           0,0,0,0,0,0,0,0,0,0,0,0
+    Dword           0
+    Dword           readkey
+    Dword           0,0,0,0,0,0,0,0,0,0,0
     ; 21h-30h
     Dword           0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
 
@@ -76,6 +78,26 @@ _vectors:
     Word        put_msg ; pone un mensaje
     Word        memcpy  ; copia memoria
     Word        readsec ; lee un sector
+
+; ===========================================
+;           Mark3302 KY1 Keyboard
+;
+; buffer de espera de las teclas del teclado
+; para almacenarlas y luego atraparlas
+;
+; ===========================================
+
+    KEYBUF_SIZE Equ 128 ; equivale
+    Align       KEYBUF_SIZE ; alineacion para asegurarse
+
+KEYB_BUF:
+    Byte        0       ; para desalinear
+    Align       KEYBUF_SIZE ; truco ya que no existe la instruccion Dup
+
+KEYB_SHEAD:
+    Byte        0       ; el header del buffer
+KEYB_STAIL:
+    Byte        0       ; el tail del buffer
 
 ; ===========================================
 ;           STAGES FIRMWARE
@@ -154,6 +176,46 @@ fixSerial:
     Ror-Byte        Bx, 20h
     Int-Byte        10h
     Jmp-Dword-Clasic Sp         ; regresar
+
+keybuf_empty:
+    Lea-Dword       KEYB_SHEAD
+    Mov-Byte
+    Ror-Byte        Al, Out
+    Lea-Dword       KEYB_STAIL
+    Mov-Byte
+    Ror-Byte        Ah, Out
+    Push-Byte       Al
+    Push-Byte       Ah
+    Cmp-Byte-Sp-Sp
+    Jmp-Dword-Clasic Sp
+
+readkey_isempty:
+    Ror-Byte        Ah, 0       ; el resultado si no esta
+    Jmp-Dword-Clasic readkey_end ; finalizar
+readkey:
+    Jmp-Dword-Call  keybuf_empty ; verificar si el teclado esta vacio
+    Jmp-Dword-Zero  readkey_isempty ; saltar si esta vacio
+    Lea-Dword       KEYB_STAIL      ; leer el tail
+    Mov-Byte                        ; obtener
+    Ror-Byte        Al, Out         ; obtener
+    Ror-Dword       Ax, KEYB_BUF    ; direccion del buffer
+    Push-Dword      Ax              ; poner en el stack AX
+    Push-Dword      Al              ; poner en el stack Al
+    Add-Dword-Sp-Sp                 ; sumarlo
+    Lea-Dword       Out             ; obtener resultado
+    Mov-Byte                        ; obtener byte obtenido
+    Ror-Byte        Ah, Out         ; retornarlo
+    Lea-Dword       KEYB_STAIL      ; direccion
+    Mov-Byte                        ; obtener byte
+    Push-Byte       Out             ; guardar Out
+    Add-Byte-Sp-Inm 1               ; añadir byte
+    Push-Byte       Out             ; guardar Out
+    Mod-Byte-Sp-Inm KEYBUF_SIZE     ; modular
+    Lea-Dword       KEYB_STAIL      ; direccion
+    Out-Byte        Out             ; obtener byte
+
+readkey_end:
+    Jmp-Dword-Clasic Sp
 
 ; ===========================================
 ;           DISK INT
@@ -720,6 +782,8 @@ INT5_irq:
     Push-Dword      Ax          ; guardar
     Push-Dword      Bx          ; guardar
     Push-Dword      Cx          ; guardar
+    Push-Dword      Al          ; guardar
+    Push-Dword      Ah          ; guardar
 
     Lea-Dword       MA3302_Current_KY ; direccion
     Mov-Byte                    ; obtener byte
@@ -730,6 +794,8 @@ INT5_irq:
     Jmp-Dword-Zero  M3KY1_Hand ; manejar
 
 INT5_end:
+    Ror-Dword       Ah, Sp      ; recuperar
+    Ror-Dword       Al, Sp      ; recuperar
     Ror-Dword       Cx, Sp      ; recuperar
     Ror-Dword       Bx, Sp      ; recuperar
     Ror-Dword       Ax, Sp      ; recuperar
@@ -748,12 +814,58 @@ M3KY1_Hand:
     Ror-Dword       Cx, Out     ; copiar
     Lea-Dword       Cx          ; direccion
     Mov-Byte                    ; obtener
-
-    Ror-Byte        Ax, 0Eh     ; teletipo
     Ror-Byte        Bx, Out     ; obtener byte
-    Int-Byte        10h         ; servicio
-    
+
+    Jmp-Dword-Call KEYB_BUF_FULL ; verificar si esta vacio
+    Jmp-Dword-Zero  INT5_end    ; terminar
+
+    Ror-Dword       Cx, KEYB_BUF ; leer el buffer
+    Lea-Dword       KEYB_SHEAD  ; obtener
+    Mov-Byte                    ; obtener
+    Ror-Byte        Ax, Out     ; guardar
+    Push-Dword      Cx          ; evitar el bug otra vez
+    Add-Dword-Reg-Sp Ax         ; guardar
+    Lea-Dword       Out         ; el buffer y indice
+    Out-Byte        Bx          ; guardar el indice de caracter
+    Jmp-Dword-Call KEYB_BUF_CALCI ; calcular
+    Lea-Dword       KEYB_SHEAD  ; direccion
+    Out-Byte        Ax          ; guardar resultado
+
     Jmp-Dword-Clasic INT5_end   ; finalizar
+
+; ((scancodeskey_head + 1) % KEYBUF_SIZE) == scancodeskey_tail
+KEYB_BUF_FULL:
+    Lea-Dword       KEYB_SHEAD  ; direccion
+    Mov-Byte                    ; obtener byte
+    Add-Byte-Reg-Inm Out, 1     ; añadir 1
+    Mod-Byte-Reg-Inm Out, KEYBUF_SIZE ; modular
+    Lea-Dword       KEYB_STAIL  ; obtener
+    Ror-Byte        Al, Out     ; guardar
+    Mov-Byte                    ; obtener byte
+    Ror-Byte        Ax, Out     ; guardar
+    Push-Byte       Ax          ; para solucionar un bug
+    Cmp-Byte-Reg-Sp Al          ; comparaar
+    Jmp-Dword-Clasic Sp         ; retorno
+
+; ((scancodeskey_head + 1) % KEYBUF_SIZE)
+KEYB_BUF_CALCI:
+    Lea-Dword       KEYB_SHEAD  ; direccion
+    Mov-Byte                    ; obtener byte
+    Add-Byte-Reg-Inm Out, 1     ; añadir 1
+    Mod-Byte-Reg-Inm Out, KEYBUF_SIZE ; modular
+    Ror-Byte        Ax, Out     ; guardar
+    Jmp-Dword-Clasic Sp         ; retorno
+
+KEYB_BUF_EMPTY:
+    Lea-Dword       KEYB_SHEAD  ; direccion
+    Mov-Byte                    ; obtener
+    Ror-Byte        Ah, Out     ; header
+    Lea-Dword       KEYB_STAIL  ; direccion
+    Mov-Byte                    ; obtener
+    Ror-Byte        Al, Out     ; header
+    Cmp-Byte-Reg-Reg Ah, Al     ; comparar head con tail
+    Jmp-Dword-Clasic Sp         ; retorno
+
 
 Assume-Fill 0x7200
 
