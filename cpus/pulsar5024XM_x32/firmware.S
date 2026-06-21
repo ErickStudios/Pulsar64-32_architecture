@@ -100,6 +100,20 @@ KEYB_STAIL:
     Byte        0       ; el tail del buffer
 
 ; ===========================================
+;           Stack del firmware
+;
+; el stack del firmware solo para la inicializacion
+; y pruebas de inio del dispositivo
+;
+; ===========================================
+
+    Align       188 ; alineacion para asegurarse
+STACK:
+    Byte        0   ; para desalinear
+    Align       1024 ; poner 1024 bytes en el stack
+STACKSTART:
+
+; ===========================================
 ;           STAGES FIRMWARE
 ;
 ; etapas del firmware sobre su boot
@@ -110,6 +124,16 @@ KEYB_STAIL:
 ; inicializa el firmware
 ;
 _init:
+P0:
+    Cmp-Byte-Inm-Inm 4Ch, 2Bh       ; comparar valores
+    Jmp-Dword-Zero  P0              ; reintentar hasta que lo procese bien
+    Jmp-Dword-Less  P0              ; COMO VA A SER MENOR ESE NUMERO HDP!!
+P1:
+    Ror-Dword       Ss, STACKSTART  ; configurar stack
+    Cmp-Dword-Reg-Inm Ss, STACKSTART ; comparar si funciona
+    Jmp-Dword-Zero  P2              ; siguiente etapa
+    Jmp-Dword-Clasic P1             ; si se configuro
+P2:
     Lea-dword       firmware_on_flag
     Out-Byte        0
 

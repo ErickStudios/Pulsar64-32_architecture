@@ -36,7 +36,7 @@ reg  [7:0]          OprOperator;
 reg  [7:0]          OprOperationBytes;
 reg  [7:0]          valueRegister;
 reg  [7:0]          op_id;
-reg  [31:0]         a, b, result, r0, r1, r2, r3, r4, r5, r6, r7, r8;
+reg  [31:0]         a, b, tempReg, result, r0, r1, r2, r3, r4, r5, r6, r7, r8;
 reg  [7:0]          ir;
 reg  [7:0]          opcode;
 reg  [7:0]          mode;
@@ -121,11 +121,11 @@ begin
             pc = pc + bytesLen;
         end
         4'h1: begin
-            a = memory[pc];
+            tempReg = memory[pc];
             pc = pc + 1;
 
             // register
-            case (a)
+            case (tempReg)
                 0: val =        result; // Out
                 1: val =        valueRegister; // [[Obsolete]]
                 2: val =        currentPtrAddrs;// Px
@@ -137,6 +137,7 @@ begin
                 8: val =        r5;     // Al (extra a1 regiXter)   
                 9: val =        r6;     // Bh (extra b1 regiXter)   
                 10:val =        r7;     // Bl (extra b2 regiXter)   
+                11:val =        sp;     // Ss (Stack regiSter)   
                 default: val = 0;
             endcase
         end
@@ -399,6 +400,7 @@ task ex_wrx; begin
         8: r5 =             a;  // Al (extra a1 regiXter)   
         9: r6 =             a;  // Bh (extra b1 regiXter)   
         10:r7 =             a;  // Bl (extra b2 regiXter)   
+        11:sp =             a;  // Ss (Stack regiSter)   
         default: valueRegister = 0;
     endcase
 
@@ -471,14 +473,6 @@ always @(posedge clk) begin
         CWFDM = 0;
     // tick of click
     end else begin
-
-        if (sp < 50000) begin
-            if (!quiet) $display("HARDWARE   STACK OVERFLOW %0d %0d", irq_addr, irq_data);
-            general_reset();
-            alu_reset();
-            CWFDD = 0;
-            CWFDM = 0;
-        end
 
         if (mem_wrt_bool) begin
             memory[mem_wrt_addr] <= mem_wrt_val;

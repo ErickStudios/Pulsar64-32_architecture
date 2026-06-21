@@ -195,6 +195,9 @@ export function AssembleLineWithoutContext(line, ctx, len=null) {
       if (ident.value.toUpperCase() === 'BL') {
         return ({ type: 'symbol', value: 'cpu.registers.bl' });
       }
+      if (ident.value.toUpperCase() === 'SS') {
+        return ({ type: 'symbol', value: 'cpu.registers.ss' });
+      }
       if (ctx.symbols.has(ident.value)) {
         return ({ type: 'inm', value: ctx.symbols.get(ident.value) + ctx.orgIn });
       }
@@ -224,6 +227,8 @@ export function AssembleLineWithoutContext(line, ctx, len=null) {
     if (name === 'cpu.registers.al') {return 8;}
     if (name === 'cpu.registers.bh') {return 9;}
     if (name === 'cpu.registers.bl') {return 10;}
+    if (name === 'cpu.registers.ss') {return 11;}
+
   }
   function operandParse(op) {
     if (op.toUpperCase() == "SP") return { type: 'stack', bind: 2 };
