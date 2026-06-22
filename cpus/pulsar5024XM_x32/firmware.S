@@ -25,8 +25,7 @@ SERIAL_MODE_SWITCH  Equ  0x01
 ; el cpu inicia, no es de la pc es del cpu
 ; en general
 ;
-_reset_vector:
-    Dword           _init
+_reset_vector:      Dword _init
 
 ; ===========================================
 ; vectores de dispositivos y sus irqs que
@@ -54,30 +53,21 @@ _devices_vector:
     Dword           0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
 
 ; ===========================================
-; mapa de caracteres
+;           Mark3302 KY1 Char Map
 ;
-; 1234567890
-; ABCDEFGHIJ
-; KLMNOPQRST ^
-;   UVWXYZ  <v>
+; traducciones de indices de las teclas del KY1
+; para traducirlos a caracteres ASCII
 ;
-char_map:
-    Byte            49,50,51,52,53,54,55,56,57,48       ; 1-0
-    Byte            65,66,67,68,69,70,71,72,73,74       ; A-J
-	Byte            75,76,77,78,79,80,81,82,83,84,1     ; K-T & Up
-	Byte            85,86,87,88,89,90,2,3,4             ; U-Z & Left/Right & Down
-
-Assume-Fill         0x1F0
-
 ; ===========================================
-; vectors de funciones del firmware 
-; (para mantener compatibilidad)
-;
-_vectors:
-    Word        put_char ; coloca un caracter
-    Word        put_msg ; pone un mensaje
-    Word        memcpy  ; copia memoria
-    Word        readsec ; lee un sector
+
+    MAX_CHARS_S Equ 64
+    Align       MAX_CHARS_S
+
+char_map:       Byte 49,50,51,52,53,54,55,56,57,48  ; 1-0
+                Byte 65,66,67,68,69,70,71,72,73,74  ; A-J
+                Byte 75,76,77,78,79,80,81,82,83,84,1; K-T & Up
+                Byte 85,86,87,88,89,90,2,3,4        ; U-Z & Left/Right & Down
+                Align MAX_CHARS_S
 
 ; ===========================================
 ;           Mark3302 KY1 Keyboard
@@ -107,10 +97,13 @@ KEYB_STAIL:
 ;
 ; ===========================================
 
-    Align       188 ; alineacion para asegurarse
+    STACK_SIZE  Equ 1024   ; el tamaño del stack
+    Align       STACK_SIZE ; alineacion para asegurarse
+
 STACK:
-    Byte        0   ; para desalinear
-    Align       1024 ; poner 1024 bytes en el stack
+    Byte        0           ; para desalinear
+    Align       STACK_SIZE  ; poner 1024 bytes en el stack
+    
 STACKSTART:
 
 ; ===========================================
@@ -387,16 +380,12 @@ F10H_CNL:
 
     Jmp-Dword-Clasic F10H_C1            ; regresar
 
-SGA_BYTE_SAVEDA:
-    Byte            0                   ; guardado
-SGA_IMG_X_SAVED:
-    Byte            0                   ; guardado
-SGA_IMG_X_SAVED2:
-    Byte            0                   ; guardado
-SGA_IMG_Y_SAVED:
-    Byte            0                   ; guardado
-SGA_IMG_X_ORIGN:
-    Byte            0                   ; guardado
+; ========== datos temporales de el dibujado de la imagen ==========
+SGA_BYTE_SAVEDA:    Byte 0      ; guardado
+SGA_IMG_X_SAVED:    Byte 0      ; guardado
+SGA_IMG_X_SAVED2:   Byte 0      ; guardado
+SGA_IMG_Y_SAVED:    Byte 0      ; guardado
+SGA_IMG_X_ORIGN:    Byte 0      ; guardado
 
 VideoWapperWrtMsgCmpty:
     Lea-Dword       Bx          ; el
@@ -601,8 +590,6 @@ down_button_irq:
     Lea-Dword       Sp
     Jmp-Dword-Clasic Sp
 
-Assume-Fill         0xFFF
-
 ; ===========================================
 ;           SERIAL MMIO
 ;
@@ -627,31 +614,16 @@ SERIAL_NON_CMD_SND  Equ 0       ; indica que no hay ningun comando que procesar 
                                 ; de procesar comandos hasta que actualizes esa direccion de
                                 ; memoria osea la de 'serial_port_cmd'
 
-; ===========================================
-; caracter a mandar al puerto serial o datos
-; de comando respectivo
-;
-serial_char_send:
-    Byte     SERIAL_DEFAULT_VAL
-; ===========================================
-; mandon de comandos al puerto serial
-;
-serial_port_cmd:
-    Byte     SERIAL_NON_CMD_SND
-; ===========================================
-; estado del puerto serial
-;
-serial_port_status:
-    Byte     SERIAL_UNDEF_STATU
+    Align           0FFFh
+; ========== caracter a mandar al puerto serial o datos de comando respectivo ==========
+serial_char_send:   Byte SERIAL_DEFAULT_VAL ; caracter a mandar al puerto serial o datos
+; ========== mandon de comandos al puerto serial ==========
+serial_port_cmd:    Byte SERIAL_NON_CMD_SND
+; ========== estado del puerto serial ==========
+serial_port_status: Byte SERIAL_UNDEF_STATU
 
-Assume-Fill     0x1FFF
-
-bootmsg:
-    Byte     'b', 'o', 'o', 't', 'i', 'n', 'g', ' ', 'f', 'r', 'o',  'm', ' ', 'R', 'O', 'M', 10, 0
-disk_inserted:
-    Byte     'c','a','s','s','e','t','e',' ','i','n','s','e','r','t','e','d', 10, 0
-key_pressed:
-    Byte     'K', 'E', 'Y', ' ', 'P', 'R', 'E', 'S', 'S', 'E', 'D', 10, 0
+bootmsg:            Byte 'b', 'o', 'o', 't', 'i', 'n', 'g', ' ', 'f', 'r', 'o',  'm', ' ', 'R', 'O', 'M', 10, 0
+disk_inserted:      Byte 'c','a','s','s','e','t','e',' ','i','n','s','e','r','t','e','d', 10, 0
 
 ; ===========================================
 ;           CASSETE FUNCS
@@ -663,8 +635,6 @@ key_pressed:
 ; entre otros programas de arranque post bios
 ;
 ; ===========================================
-
-Assume-Fill     0x2FFF
 
 CASSETE_READ_DOT    Equ 12  ; lee un punto en el cassete
                             ; es una respuesta a una de las 
@@ -685,34 +655,23 @@ CASSETE_WAITING_UE  Equ 24  ; que esta pendiente que se inserto un
 ; en la irq que se llamo actualmente
 ;
 ; cassete_external_cmd_alias_que_quieres_we:
-cassete_external_cmd:
-    Byte 0xFF
-
-Assume-Fill 0x4F00
+    Align           2FFFh
+cassete_external_cmd: Byte 0FFh
 
 ; ===========================================
 ; variables que indican que el cassete se leyo
 ; o no? que ya me confundi
 ;
-cassete_readed_sector_finish:
-    Byte 0
-
-Assume-Fill 0x4F02
-
-; ===========================================
-; variable que indica el sector a leer con read
-; sector
-;
-cassete_readed_sector_finish:
-    Word 0
+    Align           4F00h
+cassete_readed_sector_finish: Byte 0
 
 ; ===========================================
 ; variable que indica el sector que ha leido esa cosa
 ;
-Assume-Fill 0x4FFF
-;cassete_external_sector_lo_que_lello_este_men:
-cassete_external_sector:
-    Assume-Fill 0x51FF
+    Align           4FFFh
+cassete_external_sector: 
+    Byte            0,0
+    Align 512
 
 ; ===========================================
 ;           Mark3302 Datas
@@ -725,16 +684,13 @@ cassete_external_sector:
 ;
 ; ===========================================
 
-    Assume-Fill 5202h
+    Align           5202h
 ; ========== dispositivo KY que envio el int ===========
-MA3302_Current_KY:
-    Byte            0
+MA3302_Current_KY:  Byte 0
 ; ========== indice de la tecla que se actualizo ===========
-MA3302_KY1_KINDEX:
-    Byte            0
+MA3302_KY1_KINDEX:  Byte 0
 ; ========== el estado de la tecla ===========
-MA3302_KY1_KSTAT:
-    Byte            0
+MA3302_KY1_KSTAT:   Byte 0
 
 ; ===========================================
 ; funcion interna de cassete no el de para 
@@ -891,8 +847,6 @@ KEYB_BUF_EMPTY:
     Jmp-Dword-Clasic Sp         ; retorno
 
 
-Assume-Fill 0x7200
-
 ; ===========================================
 ;           DATA SECTION
 ;
@@ -904,43 +858,31 @@ Assume-Fill 0x7200
 ; ===========================================
 ; datos de memcpy
 ;
-memcpy_src:
-    Dword           0
-memcpy_dst:
-    Dword           0
-memcpy_siz:
-    Dword           0
-
-Assume-Fill 0x720D
+    Align           7200h
+memcpy_src:         Dword 0
+memcpy_dst:         Dword 0
+memcpy_siz:         Dword 0
 
 ; ===========================================
 ; datos de load sector
 ;
-llbasect_sect_low:
-    Byte            0
-llbasect_sect_high:
-    Byte            0
+    Align           720Dh
+llbasect_sect_low:  Byte 0
+llbasect_sect_high: Byte 0
 
 ; ===========================================
 ; datos de load mmfs
 ;
-llbasect_mmfs_low:
-    Byte            0
-llbasect_mmfs_high:
-    Byte            0
+llbasect_mmfs_low:  Byte 0
+llbasect_mmfs_high: Byte 0
 
-
-Assume-Fill 0x7FFF
-
-old_pix_x:
-    Byte     0
-old_pix_y:
-    Byte     0
-
-firmware_on_flag:
-    Byte     0
-
-Assume-Fill 64000
+; ===========================================
+; datos de guardado del pixel
+;
+    Align 7FFFh
+old_pix_x:          Byte 0
+old_pix_y:          Byte 0
+firmware_on_flag:   Byte 0
 
 ; ===========================================
 ;           OFITIAL MMIO
@@ -950,27 +892,13 @@ Assume-Fill 64000
 ;
 ; ===========================================
 
-alpha_mmio:
-                    Byte 0   ; boton A
-beta_mmio:          
-                    Byte 0   ; boton B
-up_mmio:            
-                    Byte 0   ; boton arriba
-down_mmio:          
-                    Byte 0   ; boton abajo
-cassete_mmio:       
-                    Byte 0   ; mmio del cassete
-sga_data_mmio:      
-                    Byte 0   ; al ultimo de configurar el SGA row y SGA col se pone el color para esto
-sga_row_mmio:       
-                    Byte 0   ; posicion y de la SGA
-sga_col_mmio:       
-                    Byte 0   ; posicion x de la SGA
-com1_new_mmio:
-                    Byte 0   ; nuevo MMIO del com1
-com1_cmd_mmio:
-                    Byte 0   ; nuevo MMIO del com1
-cassete_sector_read_cmd:
-                    Byte 0   ; escribir 2 veces para completar el word
-cassete_selected_mmfs:
-                    Byte 0   ; disco seleccionado , start = (fs * 512) + sector
+    Align           64000
+basic_buttons_mmio: Dword 0 ; boton A, B, arriba y abajo
+cassete_mmio:       Byte 0   ; mmio del cassete
+sga_data_mmio:      Byte 0   ; al ultimo de configurar el SGA row y SGA col se pone el color para esto
+sga_row_mmio:       Byte 0   ; posicion y de la SGA
+sga_col_mmio:       Byte 0   ; posicion x de la SGA
+com1_new_mmio:      Byte 0   ; nuevo MMIO del com1
+com1_cmd_mmio:      Byte 0   ; nuevo MMIO del com1
+cassete_sector_read_cmd: Byte 0 ; escribir 2 veces para completar el word
+cassete_selected_mmfs: Byte 0   ; disco seleccionado , start = (fs * 512) + sector
