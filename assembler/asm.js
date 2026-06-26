@@ -5,6 +5,7 @@ export class Context {
     this.codelen = 0;
     this.orgIn = 0;
     this.result = [];
+    this.in64 = false;
   }
 }
 
@@ -108,6 +109,7 @@ export function AssembleLineWithoutContext(line, ctx, len=null) {
   let i = 0;
   let result = [];
   function peek() {
+    console.log(tokens[i]);
     return tokens[i];
   }
   function fmt7(a) {
@@ -126,7 +128,8 @@ export function AssembleLineWithoutContext(line, ctx, len=null) {
     return typeof peek().value === 'string' ? fmt7(peek().value) : false;
   }
   function consume() {
-    return tokens[i++];
+    let axa = peek(); i++;
+    return axa;
   }
   function expect(value) {
     let t = consume();
@@ -365,8 +368,24 @@ export function AssembleLineWithoutContext(line, ctx, len=null) {
         result.push(1, sizeof, parseSymbol(expr.value))
       }
   }
+  function parseLoadAddr(sizeof) {
+      consume();
+      let dir = parseIdent(parsePrimary().value);
+      const hexCompleto = dir.toString(16).padStart(sizeof * 2, '0');
+      const bytes = hexCompleto.match(/.{1,2}/g);
+      const paresDeBytes = [];
+      for (let i = 0; i < bytes.length; i += 2) {
+          paresDeBytes.push(['0' + bytes[i] + 'h', '0' + bytes[i + 1] + 'h']);
+      }
+      let codeExpand = "";
+      paresDeBytes.forEach(v => {
+        codeExpand += `addinmb2 ${v[0]}, ${v[1]} `;
+      })
+
+      result.push(...AssembleLineWithoutContext(codeExpand, ctx, len));
+  }
   while (i < tokens.length) {
-    if (peek7() === 'PUSH') {
+    if (!ctx.in64 && peek7() === 'PUSH') {
       consume();
       result.push(3);
       let sizeof = 4;
@@ -391,10 +410,46 @@ export function AssembleLineWithoutContext(line, ctx, len=null) {
         result.push(1, sizeof, parseSymbol(expr.value))
       }
     }
-    else if (peek7() === 'STOSB') parseStos(1);
-    else if (peek7() === 'STOSW') parseStos(2);
-    else if (peek7() === 'STOSD') parseStos(4);
-    else if (peek7() === 'OUT') {
+    else if (peek7() === 'ORG32') { consume(); ctx.in64 = false;}
+    else if (peek7() === 'ORG64') { consume(); ctx.in64 = true;}
+    else if (!ctx.in64 && peek7() === 'DBGAC64') { consume(); result.push(0xB); }
+    else if (ctx.in64 && peek7() === 'SLCINM') {
+      consume(); 
+      result.push(1, 0xFF, 1, parseIdent(parsePrimary().value));
+    }
+    else if (ctx.in64 && peek7() === 'LD64') {
+      parseLoadAddr(8);
+    }
+    else if (ctx.in64 && peek7() === 'LD32') {
+      parseLoadAddr(4);
+    }
+    else if (ctx.in64 && peek7() === 'LD16') {
+      parseLoadAddr(2);
+    }
+    else if (ctx.in64 && peek7() === 'RSTINM') {
+      consume(); 
+      result.push(1, 0xFF, 0xFF, 1);
+    }
+    else if (ctx.in64 && peek7() === 'ADDINMB2') {
+      consume(); 
+      result.push(
+        1, 0x12, 
+        ([parseIdent(parsePrimary().value), expect(',')])[0], 
+        parseIdent(parsePrimary().value)
+      );
+    }
+    else if (ctx.in64 && peek7() === 'LINM') {
+      consume(); 
+      result.push(
+        1, 0x40, 
+        ([consume(), expect(',')])[0], 
+        parseIdent(parsePrimary().value)
+      );
+    }
+    else if (!ctx.in64 && peek7() === 'STOSB') parseStos(1);
+    else if (!ctx.in64 && peek7() === 'STOSW') parseStos(2);
+    else if (!ctx.in64 && peek7() === 'STOSD') parseStos(4);
+    else if (!ctx.in64 && peek7() === 'OUT') {
       consume();
       expect('-');
       result.push(8);
@@ -407,7 +462,7 @@ export function AssembleLineWithoutContext(line, ctx, len=null) {
         result.push(1, sizeof, parseSymbol(expr.value))
       }
     }
-    else if (peek7() === 'INT') {
+    else if (!ctx.in64 && peek7() === 'INT') {
       consume();
       expect('-');
       result.push(9);
@@ -423,7 +478,7 @@ export function AssembleLineWithoutContext(line, ctx, len=null) {
         result.push(2, sizeof);
       }
     }
-    else if (peek7() === 'LEA') {
+    else if (!ctx.in64 && peek7() === 'LEA') {
       consume();
       let sizeof = 4;
       result.push(1);
@@ -441,7 +496,7 @@ export function AssembleLineWithoutContext(line, ctx, len=null) {
         result.push(2, sizeof);
       }
     }
-    else if (peek7() === 'MOV') {
+    else if (!ctx.in64 && peek7() === 'MOV') {
       consume();
       if (peek().value == '-') {
         consume();
@@ -502,15 +557,15 @@ export function AssembleLineWithoutContext(line, ctx, len=null) {
         }
         }
     }
-    else if (peek7() === 'LODSB') [consume(), movBytea(1)];
-    else if (peek7() === 'LODSW') [consume(), movBytea(2)];
-    else if (peek7() === 'LODSD') [consume(), movBytea(4)];
+    else if (!ctx.in64 && peek7() === 'LODSB') [consume(), movBytea(1)];
+    else if (!ctx.in64 && peek7() === 'LODSW') [consume(), movBytea(2)];
+    else if (!ctx.in64 && peek7() === 'LODSD') [consume(), movBytea(4)];
 
-    else if (peek7() === 'HLT') {
+    else if (!ctx.in64 && peek7() === 'HLT') {
       consume();
       result.push(5);
     }
-    else if (peek7() === "CMP") {
+    else if (!ctx.in64 && peek7() === "CMP") {
       consume();
       result.push(6);
       expect('-');
@@ -540,10 +595,10 @@ export function AssembleLineWithoutContext(line, ctx, len=null) {
        if (a0 && operand2.type !== 'stack') expect(',');
       let a1 = casterA(operand2);
     }
-    else if (peek7() === "CMPSB") parseCmp(1);
-    else if (peek7() === "CMPSW") parseCmp(2);
-    else if (peek7() === "CMPSD") parseCmp(4);
-    else if (peek7() === "JMP") {
+    else if (!ctx.in64 && peek7() === "CMPSB") parseCmp(1);
+    else if (!ctx.in64 && peek7() === "CMPSW") parseCmp(2);
+    else if (!ctx.in64 && peek7() === "CMPSD") parseCmp(4);
+    else if (!ctx.in64 && peek7() === "JMP") {
       consume();
       result.push(7);
       if (peek().value !== '-') {
@@ -588,21 +643,21 @@ export function AssembleLineWithoutContext(line, ctx, len=null) {
         }
       }
     }
-    else if (peek7() === "JZ") parseJmpType(1);
-    else if (peek7() === "JL") parseJmpType(2);
-    else if (peek7() === "JG") parseJmpType(3);
-    else if (peek7() === "CALL") parseJmpType(4);
-    else if (peek7() === 'ADD') parseOperation(1);
-    else if (peek7() === 'SUB') parseOperation(2);
-    else if (peek7() === 'MUL') parseOperation(3);
-    else if (peek7() === 'DIV') parseOperation(4);
-    else if (peek7() === 'AND') parseOperation(5);
-    else if (peek7() === 'OR') parseOperation(6);
-    else if (peek7() === 'XOR') parseOperation(7);
-    else if (peek7() === 'SHL') parseOperation(9);
-    else if (peek7() === 'SHR') parseOperation(10);
-    else if (peek7() === 'MOD') parseOperation(0xF);
-    else if (peek7() === 'ASSUME') {
+    else if (!ctx.in64 && peek7() === "JZ") parseJmpType(1);
+    else if (!ctx.in64 && peek7() === "JL") parseJmpType(2);
+    else if (!ctx.in64 && peek7() === "JG") parseJmpType(3);
+    else if (!ctx.in64 && peek7() === "CALL") parseJmpType(4);
+    else if (!ctx.in64 && peek7() === 'ADD') parseOperation(1);
+    else if (!ctx.in64 && peek7() === 'SUB') parseOperation(2);
+    else if (!ctx.in64 && peek7() === 'MUL') parseOperation(3);
+    else if (!ctx.in64 && peek7() === 'DIV') parseOperation(4);
+    else if (!ctx.in64 && peek7() === 'AND') parseOperation(5);
+    else if (!ctx.in64 && peek7() === 'OR') parseOperation(6);
+    else if (!ctx.in64 && peek7() === 'XOR') parseOperation(7);
+    else if (!ctx.in64 && peek7() === 'SHL') parseOperation(9);
+    else if (!ctx.in64 && peek7() === 'SHR') parseOperation(10);
+    else if (!ctx.in64 && peek7() === 'MOD') parseOperation(0xF);
+    else if (!ctx.in64 && peek7() === 'ASSUME') {
       consume();
       expect('-');
       let action = consume();
@@ -634,7 +689,7 @@ export function AssembleLineWithoutContext(line, ctx, len=null) {
       let bytesfill = (alignTo - (len % alignTo)) % alignTo;
       result.push(...Array(bytesfill).fill(0));
     }
-    else if (peek7() === 'ROR') {
+    else if (!ctx.in64 && peek7() === 'ROR') {
       consume();
       result.push(0xA);
       expect('-');
