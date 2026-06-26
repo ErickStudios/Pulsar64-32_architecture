@@ -110,6 +110,21 @@ export function AssembleLineWithoutContext(line, ctx, len=null) {
   function peek() {
     return tokens[i];
   }
+  function fmt7(a) {
+    return a.toUpperCase();
+  }
+  function fmt8(a) {
+    return fmt7(a.value);
+  }
+  function psfmt7() {
+    return parseSize(fmt8(consume()));
+  }
+  function psfmt72(a) {
+    return a.value !== undefined ? parseSize(fmt8(a)) : undefined;
+  }
+  function peek7() {
+    return typeof peek().value === 'string' ? fmt7(peek().value) : false;
+  }
   function consume() {
     return tokens[i++];
   }
@@ -120,7 +135,7 @@ export function AssembleLineWithoutContext(line, ctx, len=null) {
     }
   }
   function parseSize(name) {
-    switch (name.toUpperCase()) {
+    switch (fmt7(name)) {
       case 'BYTE': return 1;
       case 'WORD': return 2;
       case 'DWORD': return 4;
@@ -130,14 +145,14 @@ export function AssembleLineWithoutContext(line, ctx, len=null) {
     if (peek().value === '[') {
       consume();
       let v1 = parsePrimary();
-      if (peek().value.toUpperCase() === 'IN') {
+      if (peek7() === 'IN') {
         consume();
         let v2 = parsePrimary();
         let result = v2.value + (v1.value - ctx.orgIn);
         expect("]");
         return ({ type: 'inm', value: result });
       }
-      else if (peek().value.toUpperCase() === 'SEGMENT') {
+      else if (peek7() === 'SEGMENT') {
         consume();
         let v2 = parsePrimary();
         expect(':');
@@ -146,7 +161,7 @@ export function AssembleLineWithoutContext(line, ctx, len=null) {
         expect("]");
         return ({ type: 'inm', value: result });
       }
-      else if (peek().value.toUpperCase() === 'OUT') {
+      else if (peek7() === 'OUT') {
         consume();
         let v2 = parsePrimary();
         let result = (v1.value - v2.value) + ctx.orgIn;
@@ -155,47 +170,47 @@ export function AssembleLineWithoutContext(line, ctx, len=null) {
       }
     }
     if (typeof peek().value === 'number') return ({ type: 'inm', value: consume().value });
-    if (peek().value.toUpperCase() === 'SP') {
+    if (peek7() === 'SP') {
       consume();
       return ({ type: 'stack' });
     }
     let ident;
     if (peek().type === 'identifier') {
       ident = consume();
-      if (ident.value.toUpperCase() === 'OUT') {
+      if (fmt7(ident.value) === 'OUT') {
         return ({ type: 'symbol', value: 'cpu.registers.result' });
       }
-      /*if (ident.value.toUpperCase() === 'DX') {
+      /*if (ident.fmt7(value) === 'DX') {
         return ({ type: 'symbol', value: 'cpu.registers.data' });
       } [[Obsolete]]*/
-      if (ident.value.toUpperCase() === 'PX') {
+      if (fmt7(ident.value) === 'PX') {
         return ({ type: 'symbol', value: 'cpu.registers.ptr' });
       }
-      if (ident.value.toUpperCase() === 'AX') {
+      if (fmt7(ident.value) === 'AX') {
         return ({ type: 'symbol', value: 'cpu.registers.ax' });
       }
-      if (ident.value.toUpperCase() === 'BX') {
+      if (fmt7(ident.value) === 'BX') {
         return ({ type: 'symbol', value: 'cpu.registers.bx' });
       }
-      if (ident.value.toUpperCase() === 'CX') {
+      if (fmt7(ident.value) === 'CX') {
         return ({ type: 'symbol', value: 'cpu.registers.cx' });
       }
-      if (ident.value.toUpperCase() === 'DX') {
+      if (fmt7(ident.value) === 'DX') {
         return ({ type: 'symbol', value: 'cpu.registers.dx' });
       }
-      if (ident.value.toUpperCase() === 'AH') {
+      if (fmt7(ident.value) === 'AH') {
         return ({ type: 'symbol', value: 'cpu.registers.ah' });
       }
-      if (ident.value.toUpperCase() === 'AL') {
+      if (fmt7(ident.value) === 'AL') {
         return ({ type: 'symbol', value: 'cpu.registers.al' });
       }
-      if (ident.value.toUpperCase() === 'BH') {
+      if (fmt7(ident.value) === 'BH') {
         return ({ type: 'symbol', value: 'cpu.registers.bh' });
       }
-      if (ident.value.toUpperCase() === 'BL') {
+      if (fmt7(ident.value) === 'BL') {
         return ({ type: 'symbol', value: 'cpu.registers.bl' });
       }
-      if (ident.value.toUpperCase() === 'SS') {
+      if (fmt7(ident.value) === 'SS') {
         return ({ type: 'symbol', value: 'cpu.registers.ss' });
       }
       if (ctx.symbols.has(ident.value)) {
@@ -215,6 +230,11 @@ export function AssembleLineWithoutContext(line, ctx, len=null) {
     return ({ type: 'inm', value: 0 });
 
   }
+  function movBytea(sizeof) {
+    result.push(4);
+    result.push(8);
+    result.push(sizeof, 0);
+  }
   function parseSymbol(name) {
     if (name === 'cpu.registers.result') {return 0;}
     if (name === 'cpu.registers.data') {return 1;}
@@ -231,9 +251,9 @@ export function AssembleLineWithoutContext(line, ctx, len=null) {
 
   }
   function operandParse(op) {
-    if (op.toUpperCase() == "SP") return { type: 'stack', bind: 2 };
-    if (op.toUpperCase() == "INM") return { type: 'inm', bind: 0 };
-    if (op.toUpperCase() == "REG") return { type: 'reg', bind: 1 };
+    if (fmt7(op) == "SP") return { type: 'stack', bind: 2 };
+    if (fmt7(op) == "INM") return { type: 'inm', bind: 0 };
+    if (fmt7(op) == "REG") return { type: 'reg', bind: 1 };
 
   }
   function parseJmpType(id, ignore_start=false) {
@@ -243,6 +263,10 @@ export function AssembleLineWithoutContext(line, ctx, len=null) {
     }
 
     let sizeof = 4;
+    if (peek7() === 'SHORT') {
+      consume();
+      sizeof = 2;
+    }
     result.push(sizeof);
 
     let expr = parsePrimary();
@@ -330,12 +354,35 @@ export function AssembleLineWithoutContext(line, ctx, len=null) {
     else if (ctx.symbols.has(value)) return ctx.symbols.get(value);
     return 0;
   }
-  while (i < tokens.length) {
-    if (peek().value.toUpperCase() === 'PUSH') {
+  function parseStos(sizeof) {
       consume();
-      expect('-');
+      result.push(8);
+      let expr = parsePrimary();
+      if (expr.type === 'inm') {
+        result.push(0, sizeof, ...toBigEndianBytes(expr.value, sizeof));
+      }
+      else if (expr.type == 'symbol') {
+        result.push(1, sizeof, parseSymbol(expr.value))
+      }
+  }
+  while (i < tokens.length) {
+    if (peek7() === 'PUSH') {
+      consume();
       result.push(3);
-      let sizeof = parseSize(consume().value);
+      let sizeof = 4;
+      if (peek().value === '-') {
+        expect('-');
+        sizeof = parseSize(consume().value);
+      } else {
+        if (peek7() === 'SHORT') {
+          consume();
+          sizeof = 2;
+        }
+        else if (peek7() === 'NEAR') {
+          consume();
+          sizeof = 1;
+        }
+      }
       let expr = parsePrimary();
       if (expr.type === 'inm') {
         result.push(0, sizeof, ...toBigEndianBytes(expr.value, sizeof));
@@ -344,7 +391,10 @@ export function AssembleLineWithoutContext(line, ctx, len=null) {
         result.push(1, sizeof, parseSymbol(expr.value))
       }
     }
-    else if (peek().value.toUpperCase() === 'OUT') {
+    else if (peek7() === 'STOSB') parseStos(1);
+    else if (peek7() === 'STOSW') parseStos(2);
+    else if (peek7() === 'STOSD') parseStos(4);
+    else if (peek7() === 'OUT') {
       consume();
       expect('-');
       result.push(8);
@@ -357,7 +407,7 @@ export function AssembleLineWithoutContext(line, ctx, len=null) {
         result.push(1, sizeof, parseSymbol(expr.value))
       }
     }
-    else if (peek().value.toUpperCase() === 'INT') {
+    else if (peek7() === 'INT') {
       consume();
       expect('-');
       result.push(9);
@@ -373,11 +423,13 @@ export function AssembleLineWithoutContext(line, ctx, len=null) {
         result.push(2, sizeof);
       }
     }
-    else if (peek().value.toUpperCase() === 'LEA') {
+    else if (peek7() === 'LEA') {
       consume();
-      expect('-');
+      let sizeof = 4;
       result.push(1);
-      let sizeof = parseSize(consume().value);
+      if (peek().value == '-') {
+      sizeof = parseSize(consume().value);
+      }
       let expr = parsePrimary();
       if (expr.type === 'inm') {
         result.push(0, sizeof, ...toBigEndianBytes(expr.value, sizeof));
@@ -389,7 +441,7 @@ export function AssembleLineWithoutContext(line, ctx, len=null) {
         result.push(2, sizeof);
       }
     }
-    else if (peek().value.toUpperCase() === 'MOV') {
+    else if (peek7() === 'MOV') {
       consume();
       if (peek().value == '-') {
         consume();
@@ -398,7 +450,7 @@ export function AssembleLineWithoutContext(line, ctx, len=null) {
         let sizeof = parseSize(consume().value);
         result.push(sizeof, 0);
       }
-      else {
+      else if (peek().value === '[') {
         expect("[");
         let sizeof;
         let expr;
@@ -422,12 +474,43 @@ export function AssembleLineWithoutContext(line, ctx, len=null) {
         if (expr.type === 'inm') { result.push(0, sizeof, ...toBigEndianBytes(expr.value, sizeof)); }
         else if (expr.type == 'symbol') { result.push(1, sizeof, parseSymbol(expr.value)) }
       }
+      else {
+        result.push(0xA);
+        let sizeof = 4;
+        if (peek7() === 'SHORT') {
+          consume();
+          sizeof = 2;
+        }
+        else if (peek7() === 'NEAR') {
+          consume();
+          sizeof = 1;
+        }
+        let reg = parsePrimary();
+        if (reg.type === 'symbol') {
+          let a = parseSymbol(reg.value);
+          expect(",");
+          let expr = parsePrimary();
+          if (expr.type === 'inm') {
+            result.push(0, sizeof, a, ...toBigEndianBytes(expr.value, sizeof));
+          }
+          else if (expr.type == 'symbol') {
+            result.push(1, sizeof, a, parseSymbol(expr.value))
+          }
+          else if (expr.type == 'stack') {
+            result.push(2, sizeof, a);
+          }
+        }
+        }
     }
-    else if (peek().value.toUpperCase() === 'HLT') {
+    else if (peek7() === 'LODSB') [consume(), movBytea(1)];
+    else if (peek7() === 'LODSW') [consume(), movBytea(2)];
+    else if (peek7() === 'LODSD') [consume(), movBytea(4)];
+
+    else if (peek7() === 'HLT') {
       consume();
       result.push(5);
     }
-    else if (peek().value.toUpperCase() === "CMP") {
+    else if (peek7() === "CMP") {
       consume();
       result.push(6);
       expect('-');
@@ -457,11 +540,10 @@ export function AssembleLineWithoutContext(line, ctx, len=null) {
        if (a0 && operand2.type !== 'stack') expect(',');
       let a1 = casterA(operand2);
     }
-    else if (peek().value.toUpperCase() === "CMPSB") parseCmp(1);
-    else if (peek().value.toUpperCase() === "CMPSW") parseCmp(2);
-    else if (peek().value.toUpperCase() === "CMPSD") parseCmp(4);
-
-    else if (peek().value.toUpperCase() === "JMP") {
+    else if (peek7() === "CMPSB") parseCmp(1);
+    else if (peek7() === "CMPSW") parseCmp(2);
+    else if (peek7() === "CMPSD") parseCmp(4);
+    else if (peek7() === "JMP") {
       consume();
       result.push(7);
       if (peek().value !== '-') {
@@ -483,19 +565,19 @@ export function AssembleLineWithoutContext(line, ctx, len=null) {
         else if (expr.type == 'stack') {
           result.push(2);
         }
-        if (mode.toUpperCase() === 'CLASIC') {
+        if (fmt7(mode) === 'CLASIC') {
           result.push(0);
         }
-        else if (mode.toUpperCase() === 'ZERO') {
+        else if (fmt7(mode) === 'ZERO') {
           result.push(1);
         }
-        else if (mode.toUpperCase() === 'LESS') {
+        else if (fmt7(mode) === 'LESS') {
           result.push(2);
         }
-        else if (mode.toUpperCase() === 'GREATER') {
+        else if (fmt7(mode) === 'GREATER') {
           result.push(3);
         }
-        else if (mode.toUpperCase() === 'CALL') {
+        else if (fmt7(mode) === 'CALL') {
           result.push(4);
         }
         if (expr.type === 'inm') {
@@ -506,30 +588,30 @@ export function AssembleLineWithoutContext(line, ctx, len=null) {
         }
       }
     }
-    else if (peek().value.toUpperCase() === "JZ") parseJmpType(1);
-    else if (peek().value.toUpperCase() === "JL") parseJmpType(2);
-    else if (peek().value.toUpperCase() === "JG") parseJmpType(3);
-    else if (peek().value.toUpperCase() === "CALL") parseJmpType(4);
-    else if (peek().value.toUpperCase() === 'ADD') parseOperation(1);
-    else if (peek().value.toUpperCase() === 'SUB') parseOperation(2);
-    else if (peek().value.toUpperCase() === 'MUL') parseOperation(3);
-    else if (peek().value.toUpperCase() === 'DIV') parseOperation(4);
-    else if (peek().value.toUpperCase() === 'AND') parseOperation(5);
-    else if (peek().value.toUpperCase() === 'OR') parseOperation(6);
-    else if (peek().value.toUpperCase() === 'XOR') parseOperation(7);
-    else if (peek().value.toUpperCase() === 'SHL') parseOperation(9);
-    else if (peek().value.toUpperCase() === 'SHR') parseOperation(10);
-    else if (peek().value.toUpperCase() === 'MOD') parseOperation(0xF);
-    else if (peek().value.toUpperCase() === 'ASSUME') {
+    else if (peek7() === "JZ") parseJmpType(1);
+    else if (peek7() === "JL") parseJmpType(2);
+    else if (peek7() === "JG") parseJmpType(3);
+    else if (peek7() === "CALL") parseJmpType(4);
+    else if (peek7() === 'ADD') parseOperation(1);
+    else if (peek7() === 'SUB') parseOperation(2);
+    else if (peek7() === 'MUL') parseOperation(3);
+    else if (peek7() === 'DIV') parseOperation(4);
+    else if (peek7() === 'AND') parseOperation(5);
+    else if (peek7() === 'OR') parseOperation(6);
+    else if (peek7() === 'XOR') parseOperation(7);
+    else if (peek7() === 'SHL') parseOperation(9);
+    else if (peek7() === 'SHR') parseOperation(10);
+    else if (peek7() === 'MOD') parseOperation(0xF);
+    else if (peek7() === 'ASSUME') {
       consume();
       expect('-');
       let action = consume();
-      if (action.value.toUpperCase() === 'ORG') {
+      if (fmt7(action.value) === 'ORG') {
         let inWhere = consume();
         ctx.orgIn = inWhere.value;
       }
-      else if (parseSize(action.value.toUpperCase()) !== undefined) {
-        let sizeof = parseSize(action.value.toUpperCase());
+      else if (parseSize(fmt8(action)) !== undefined) {
+        let sizeof = psfmt72(action.value);
         let primarys = toBigEndianBytes(parseIdent(parsePrimary().value),sizeof);
         while (peek() && peek().value === ",") {
           consume();
@@ -539,20 +621,20 @@ export function AssembleLineWithoutContext(line, ctx, len=null) {
         }
         result.push(...primarys);
       }
-      else if (action.value.toUpperCase() === "FILL") {
+      else if (fmt8(action) === "FILL") {
         let fillto = consume().value;
         let bytesfill = fillto - len;
         result.push(...Array(bytesfill).fill(0));
       }
     }
-    else if (peek().value.toUpperCase() === 'ALIGN') {
+    else if (peek7() === 'ALIGN') {
       consume();
       let primarys = parseIdent(parsePrimary().value);
       let alignTo = primarys;
       let bytesfill = (alignTo - (len % alignTo)) % alignTo;
       result.push(...Array(bytesfill).fill(0));
     }
-    else if (peek().value.toUpperCase() === 'ROR') {
+    else if (peek7() === 'ROR') {
       consume();
       result.push(0xA);
       expect('-');
@@ -573,8 +655,8 @@ export function AssembleLineWithoutContext(line, ctx, len=null) {
         }
       }
     }
-    else if (parseSize(peek().value.toUpperCase()) !== undefined) {
-      let sizeof = parseSize(consume().value.toUpperCase());
+    else if (parseSize(fmt8(peek())) !== undefined) {
+      let sizeof = psfmt7();
       let primarys = toBigEndianBytes(parseIdent(parsePrimary().value), sizeof);
       while (peek() && peek().value === ",") {
         consume();
@@ -591,7 +673,7 @@ export function AssembleLineWithoutContext(line, ctx, len=null) {
         consume();
         if (!('passDefedNot' in ctx)) ctx.symbols.set(varName, ctx.codelen);
         continue;
-      } else if (peek().value.toUpperCase() === 'EQU') {
+      } else if (peek7() === 'EQU') {
         consume();
         let v = consume().value;
         if (!('passDefedNot' in ctx)) ctx.equs.set(varName, v);
@@ -607,13 +689,13 @@ export function AssembleCode(code) {
   let lines = code.split('\n');
   let result = [];
   let context = new Context();
-  lines.forEach((line) => {
+  lines.forEach((line, i) => {
     let lineAssembled = AssembleLineWithoutContext(line, context);
     context.codelen += lineAssembled.length;
   })
   context.passDefedNot = true;
   let len = 0;
-  lines.forEach((line) => {
+  lines.forEach((line,i) => {
     let lineAssembled = AssembleLineWithoutContext(line, context,len);
     result.push(...lineAssembled);
     len += lineAssembled.length;

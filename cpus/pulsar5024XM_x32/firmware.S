@@ -122,37 +122,38 @@ P0:
     jz              P0              ; reintentar hasta que lo procese bien
     jl              P0              ; COMO VA A SER MENOR ESE ERO HDP!!
 P1:
-    Ror-Dword       Ss, STACKSTART  ; configurar stack
+    mov             Ss, STACKSTART  ; configurar stack
     cmpsd           ss, STACKSTART  ; comparar si funciona
     jz              P2              ; siguiente etapa
     jmp             P1              ; si se configuro
 P2:
-    Lea-dword       firmware_on_flag
-    Out-Byte        0
+    lea             firmware_on_flag
+    stosb           0
 
     ; inicializar la consola serial
-    Lea-Dword       com1_cmd_mmio
-    Out-Byte        SERIAL_MODE_SWITCH
+    lea             com1_cmd_mmio
+    
+    stosb           SERIAL_MODE_SWITCH
                                 ; no esta lista la consola serial o cuando la apagas o
                                 ; depues de un comando entonces haces que el proximo
                                 ; Byte que envies sea el parametro con el que enviaste 
                                 ; el comando
-    Ror-Byte        Ax, 0Eh     ; funcion
-    Ror-Byte        Bx, 1       ; caracter
+    mov near        Ax, 0Eh     ; funcion
+    mov near        Bx, 1       ; caracter
     Int-Byte        10h         ; interrupcion
     call            fixSerial   ; si no lo sabian si mandas un caracter en estado cuando
     call            fixSerial   ; arregla la serial
 
-    Lea-Dword       bootmsg     ; manda el mensaje
+    lea             bootmsg     ; manda el mensaje
     call            put_msg     ; pone el mensaje
-    Lea-dword       firmware_on_flag
-    Out-Byte        1
-    Lea-Dword       sga_row_mmio
-    Out-Byte        45
-    Lea-Dword       sga_col_mmio
-    Out-Byte        45
-    Lea-Dword       sga_data_mmio
-    Out-Byte        0x22
+    lea             firmware_on_flag
+    stosb           1
+    lea             sga_row_mmio
+    stosb           45
+    lea             sga_col_mmio
+    stosb           45
+    lea             sga_data_mmio
+    stosb           0x22
     jmp             C1
 
 ; ===========================================
@@ -160,27 +161,27 @@ P2:
 ; para bootear en el mmfs1
 ;
 C1:
-    Lea-Dword       Px
+    lea             Px
     jmp             C2
 C2:
-    Lea-Dword       cassete_selected_mmfs   ; la direccion
-    Out-Byte        0                       ; parte alta
-    Out-Byte        0                       ; mmfs0
-    Lea-Dword       cassete_external_cmd    ; comando
-    Out-Byte        CASSETE_READ_SECTA      ; lee un sector
-    Lea-Dword       cassete_sector_read_cmd ; la direccion
-    Out-Byte        0                       ; parte alta
-    Lea-Dword       Px
-    Lea-Dword       Px
-    Lea-Dword       Px
-    Out-Byte        0                       ; sector 0
+    lea             cassete_selected_mmfs   ; la direccion
+    stosb           0                       ; parte alta
+    stosb           0                       ; mmfs0
+    lea             cassete_external_cmd    ; comando
+    stosb           CASSETE_READ_SECTA      ; lee un sector
+    lea             cassete_sector_read_cmd ; la direccion
+    stosb           0                       ; parte alta
+    lea             Px
+    lea             Px
+    lea             Px
+    stosb           0                       ; sector 0
 
 C3:
     Hlt                         ; espera
 
-    Lea-Dword       cassete_readed_sector_finish ; la direccion
-    Mov-Byte                    ; mover byte
-    Push-Byte       Out         ; leer
+    lea             cassete_readed_sector_finish ; la direccion
+    lodsb                       ; mover byte
+    push near       Out         ; leer
     cmpsb           1, Sp           ; verificar
     jz              C4          ; se logro leer
     jmp             C3          ; salta
@@ -189,8 +190,8 @@ C4:
                                             ; de 512 bytes
 
 fixSerial:
-    Ror-Byte        Ax, 0Eh
-    Ror-Byte        Bx, 20h
+    mov near        Ax, 0Eh
+    mov near        Bx, 20h
     Int-Byte        10h
     jmp             Sp         ; regresar
 
@@ -219,41 +220,41 @@ misc_int_end:
     jmp             Sp
 
 keybuf_empty:
-    Lea-Dword       KEYB_SHEAD  ; direccion
-    Mov-Byte                    ; obtener
-    Ror-Byte        Al, Out     ; guardar
-    Lea-Dword       KEYB_STAIL  ; direccion
-    Mov-Byte                    ; obtener
-    Ror-Byte        Ah, Out     ; guardar
-    Push-Byte       Al          ; head
-    Push-Byte       Ah          ; tail
-    Cmp-Byte-Sp-Sp              ; comparar
+    lea             KEYB_SHEAD  ; direccion
+    lodsb                       ; obtener
+    mov near        Al, Out     ; guardar
+    lea             KEYB_STAIL  ; direccion
+    lodsb                       ; obtener
+    mov near        Ah, Out     ; guardar
+    push near       Al          ; head
+    push near       Ah          ; tail
+    cmpsb   Sp,Sp               ; comparar
     jmp             Sp         ; retornar
 
 readkey_isempty:
-    Ror-Byte        Ah, 0       ; el resultado si no esta
+    mov near        Ah, 0       ; el resultado si no esta
     jmp             readkey_end ; finalizar
 readkey:
     call            keybuf_empty ; verificar si el teclado esta vacio
     jz              readkey_isempty ; saltar si esta vacio
-    Lea-Dword       KEYB_STAIL      ; leer el tail
-    Mov-Byte                        ; obtener
-    Ror-Byte        Al, Out         ; obtener
-    Ror-Dword       Ax, KEYB_BUF    ; direccion del buffer
-    Push-Dword      Ax              ; poner en el stack AX
-    Push-Dword      Al              ; poner en el stack Al
+    lea             KEYB_STAIL      ; leer el tail
+    lodsb                           ; obtener
+    mov near        Al, Out         ; obtener
+    mov             Ax, KEYB_BUF    ; direccion del buffer
+    push            Ax              ; poner en el stack AX
+    push            Al              ; poner en el stack Al
     Add-Dword-Sp-Sp                 ; sumarlo
-    Lea-Dword       Out             ; obtener resultado
-    Mov-Byte                        ; obtener byte obtenido
-    Ror-Byte        Ah, Out         ; retornarlo
-    Lea-Dword       KEYB_STAIL      ; direccion
-    Mov-Byte                        ; obtener byte
-    Push-Byte       Out             ; guardar Out
+    lea             Out             ; obtener resultado
+    lodsb                           ; obtener byte obtenido
+    mov near        Ah, Out         ; retornarlo
+    lea             KEYB_STAIL      ; direccion
+    lodsb                           ; obtener byte
+    push near       Out             ; guardar Out
     Add-Byte-Sp-Inm 1               ; añadir byte
-    Push-Byte       Out             ; guardar Out
+    push near       Out             ; guardar Out
     Mod-Byte-Sp-Inm KEYBUF_SIZE     ; modular
-    Lea-Dword       KEYB_STAIL      ; direccion
-    Out-Byte        Out             ; obtener byte
+    lea             KEYB_STAIL      ; direccion
+    stosb           Out             ; obtener byte
     jmp              misc_int_end   ; terminar
 
 ; ===========================================
@@ -302,57 +303,57 @@ VideoServicesEnd:
 ; imprime una imagen
 ;
 SGA_IMG_PUSH:
-    Lea-Dword       Bx          ; obtener direccion
-    Push-Dword      Px          ; guardar
-    Lea-Dword       SGA_IMG_X_ORIGN ; direccion
-    Out-Byte        Cx          ; guardar
-    Ror-Byte        Bh, Cx      ; guardar
+    lea             Bx          ; obtener direccion
+    push            Px          ; guardar
+    lea             SGA_IMG_X_ORIGN ; direccion
+    stosb           Cx          ; guardar
+    mov near        Bh, Cx      ; guardar
 F10H_C1:
-    Lea-Dword       Sp          ; xd
-    Lea-Dword       sga_row_mmio ; direccion
-    Out-Byte        Dx          ; guardar
-    Lea-Dword       Bx          ; obtener direccion
-    Push-Dword      Px          ; guardar
-    Mov-Byte                    ; obtener byte
-    Ror-Byte        Ax, Out     ; byte
+    lea             Sp          ; xd
+    lea             sga_row_mmio ; direccion
+    stosb           Dx          ; guardar
+    lea             Bx          ; obtener direccion
+    push            Px          ; guardar
+    lodsb                       ; obtener byte
+    mov near        Ax, Out     ; byte
     Add-Dword-Reg-Inm Px, 1     ; ver el color
-    Lea-Dword       Out         ; revisar
-    Ror-Dword       Bx, Out     ; saltar
+    lea             Out         ; revisar
+    mov             Bx, Out     ; saltar
     cmpsb            Ax, 00h    ; si el valor es 0
     jz               F10H_CEND  ; XD?!
     cmpsb            Ax, 0FFh   ; si el valor es nueva linea
     jz               F10H_CNL   ; nueva linea
     Add-Dword-Reg-Inm Bx, 1     ; saltar al siguiente punto
-    Ror-Dword       Bx, Out     ; saltar
-    Mov-Byte                    ; obtener
-    Ror-Byte        Al, Out     ; obtener
-    Ror-Byte        Ah, Ax      ; guardar
+    mov             Bx, Out     ; saltar
+    lodsb                       ; obtener
+    mov near        Al, Out     ; obtener
+    mov near        Ah, Ax      ; guardar
 
 F10H_C2:
-    Lea-Dword       sga_row_mmio ; obtener direccion
-    Out-Byte        Cx          ; cargar
-    Lea-Dword       sga_col_mmio ; obtener direccion
-    Out-Byte        Dx          ; cargar
-    Lea-Dword       sga_data_mmio ; obtener direccion
-    Out-Byte        Al          ; pintar pixel
+    lea             sga_row_mmio ; obtener direccion
+    stosb           Cx          ; cargar
+    lea             sga_col_mmio ; obtener direccion
+    stosb           Dx          ; cargar
+    lea             sga_data_mmio ; obtener direccion
+    stosb           Al          ; pintar pixel
     Add-Byte-Reg-Inm Cx, 1      ; añadir
-    Ror-Byte        Cx, Out     ; obtener
-    Push-Byte       1           ; xd
-    Push-Byte       Ah          ; a.
+    mov near        Cx, Out     ; obtener
+    push near       1           ; xd
+    push near       Ah          ; a.
     Sub-Byte-Sp-Sp              ; arreglado
-    Ror-Byte        Ah, Out     ; obtener
+    mov near        Ah, Out     ; obtener
     cmpsb            Ah, 0      ; comparar
     Jmp-Dword-Greater F10H_C2   ; repetir
     jmp              F10H_C1    ; saltar
 
 F10H_CEND:
-    Lea-Dword         Sp        ; xd
+    lea               Sp        ; xd
     jmp              VideoServicesEnd   ; regresar
 
 F10H_CNL:
     Add-Byte-Reg-Inm Dx, 1      ; añadir
-    Ror-Byte        Dx, Out     ; obtener
-    Ror-Byte        Cx, Bh      ; cargar
+    mov near        Dx, Out     ; obtener
+    mov near        Cx, Bh      ; cargar
 
     jmp              F10H_C1            ; regresar
 
@@ -364,7 +365,7 @@ SGA_IMG_Y_SAVED:    Byte 0      ; guardado
 SGA_IMG_X_ORIGN:    Byte 0      ; guardado
 
 VideoWapperWrtMsgCmpty:
-    Lea-Dword       Bx          ; el
+    lea             Bx          ; el
     Int-Byte        11h         ; el int de put_msg
     jmp              VideoServicesEnd   ; regresar
 
@@ -372,17 +373,17 @@ VideoWapperWrtMsgCmpty:
 ; manda un caracter a la consola serial
 ;
 TTY_WRITE:
-    Push-Dword      Px          ; poner dword
-    Lea-Dword       com1_new_mmio ; el caracter a mandar
-    Out-Byte        Bx          ; mandar
-    Lea-Dword       Sp          ; restaurar la direccion
+    push            Px          ; poner dword
+    lea             com1_new_mmio ; el caracter a mandar
+    stosb           Bx          ; mandar
+    lea             Sp          ; restaurar la direccion
     jmp              VideoServicesEnd   ; regresar
 
 ; ===========================================
 ; pone un mensaje en la consola serial
 ;
 put_msg:
-    Push-Dword      Px          ; guardar dword
+    push            Px          ; guardar dword
 
 ; ===========================================
 ; el loop de poner un mensaje en la consola
@@ -390,30 +391,30 @@ put_msg:
 ;
 put_msg_loop:
     ; obtener caracter
-    Mov-Byte                    ; obtiene el Byte
-    Push-Byte       Out         ; pone el Byte en el stack
+    lodsb                       ; obtiene el Byte
+    push near       Out         ; pone el Byte en el stack
     Cmp-Byte-Inm-Sp 0           ; compara con terminador
-    Jmp-Word-Zero   put_msg_end ; si es igual terminar
+    jz short       put_msg_end ; si es igual terminar
 
     ; escrbir
-    Mov-Byte                    ; obtiene el Byte
-    Push-Dword      Ax          ; guardar Ax
-    Push-Dword      Bx          ; guardar Bx
-    Ror-Byte        Ax, 0Eh     ; teletipo
-    Ror-Byte        Bx, Out     ; obtener byte
+    lodsb                       ; obtiene el Byte
+    push            Ax          ; guardar Ax
+    push            Bx          ; guardar Bx
+    mov near        Ax, 0Eh     ; teletipo
+    mov near        Bx, Out     ; obtener byte
     Int-Byte        10h         ; servicio
-    Ror-Dword       Bx, Sp      ; recuperar Bx
-    Ror-Dword       Ax, Sp      ; recuperar Ax
-    Push-Dword      Px          ; guarda la dword
+    mov             Bx, Sp      ; recuperar Bx
+    mov             Ax, Sp      ; recuperar Ax
+    push            Px          ; guarda la dword
     Add-Dword-Sp-Inm 1          ; suma la direccion de memoria
-    Lea-Dword       Out         ; obtiene dword
+    lea             Out         ; obtiene dword
     jmp              put_msg_loop ; salta
     
 ; ===========================================
 ; el final del mensaje
 ;
 put_msg_end:
-    Lea-Dword       Sp          ; lee la dword
+    lea             Sp          ; lee la dword
     jmp              Sp         ; regresar
 
 ; ===========================================
@@ -438,22 +439,22 @@ DiskServicesEnd:
 
 SECT_MEM_W:
     ; obtener
-    Lea-Dword       llbasect_sect_low       ; la direccion
-    Out-Word        Bx                      ; el sector
-    Lea-Dword       llbasect_mmfs_low       ; la direccion
-    Out-Word        Cx                      ; el fs
+    lea             llbasect_sect_low       ; la direccion
+    stosw           Bx                      ; el sector
+    lea             llbasect_mmfs_low       ; la direccion
+    stosw           Cx                      ; el fs
 
     ; el sector
-    Lea-Dword       cassete_selected_mmfs   ; la direccion
-    Push-Dword      Px                      ; guardar px
-    Lea-Dword       llbasect_mmfs_low       ; el alto
-    Mov-Byte                                ; obtener byte
-    Lea-Dword       Sp                      ; recuperar px
-    Out-Byte        Out                     ; parte alta
-    Push-Dword      Px                      ; guardar px
-    Lea-Dword       llbasect_mmfs_high      ; el bajo
-    Mov-Byte                                ; obtener byte
-    Lea-Dword       Sp                      ; recuperar px    
+    lea             cassete_selected_mmfs   ; la direccion
+    push            Px                      ; guardar px
+    lea             llbasect_mmfs_low       ; el alto
+    lodsb                                   ; obtener byte
+    lea             Sp                      ; recuperar px
+    stosb           Out                     ; parte alta
+    push            Px                      ; guardar px
+    lea             llbasect_mmfs_high      ; el bajo
+    lodsb                                   ; obtener byte
+    lea             Sp                      ; recuperar px    
     
     call            readsec                 ; llamar
     Mov             [Dword memcpy_src], Dword cassete_external_sector ; fuente
@@ -470,53 +471,53 @@ SECT_MEM_W:
 ; ===========================================
 
 memcpy:
-    Push-Dword      Px
-    Push-Dword      Out
+    push            Px
+    push            Out
 M_LOOP:
 M1:
-    Lea-Dword       memcpy_src  ; source
-    Mov-Dword                   ; obtener dword
-    Lea-Dword       Out         ; source real
-    Mov-Byte                    ; obtener byte
-    Push-Dword      Out         ; guardar out
-    Lea-Dword       memcpy_src  ; source
-    Mov-Dword                   ; obtener dword
-    Push-Dword      Out         ; poner out
+    lea             memcpy_src  ; source
+    lodsd                       ; obtener dword
+    lea             Out         ; source real
+    lodsb                       ; obtener byte
+    push            Out         ; guardar out
+    lea             memcpy_src  ; source
+    lodsd                       ; obtener dword
+    push            Out         ; poner out
     Add-Dword-Sp-Inm 1          ; sumarle out
-    Out-Dword       Out         ; ponerlo
+    stosd           Out         ; ponerlo
     Add-Dword-Sp-Inm 0          ; restaurar out
 M2:
-    Push-Dword      Out         ; guardar out
-    Lea-Dword       memcpy_dst  ; destino
-    Mov-Dword                   ; obtener dword
-    Lea-Dword       Out         ; destino real
+    push            Out         ; guardar out
+    lea             memcpy_dst  ; destino
+    lodsd                       ; obtener dword
+    lea             Out         ; destino real
     Add-Dword-Sp-Inm 0          ; restaurar out
-    Out-Byte        Out         ; pegar byte
-    Push-Dword      Out         ; guardar out
-    Lea-Dword       memcpy_dst  ; destino
-    Mov-Dword                   ; obtener dword
-    Push-Dword      Out         ; poner out
+    stosb           Out         ; pegar byte
+    push            Out         ; guardar out
+    lea             memcpy_dst  ; destino
+    lodsd                       ; obtener dword
+    push            Out         ; poner out
     Add-Dword-Sp-Inm 1          ; sumarle out
-    Out-Dword       Out         ; ponerlo
+    stosd           Out         ; ponerlo
     Add-Dword-Sp-Inm 0          ; restaurar out
 M3:
-    Push-Dword      Out         ; guardar out
-    Lea-Dword       memcpy_siz  ; destino
-    Mov-Dword                   ; obtener dword
-    Push-Dword      1           ; 1
-    Push-Dword      Out         ; poner out
+    push            Out         ; guardar out
+    lea             memcpy_siz  ; destino
+    lodsd                       ; obtener dword
+    push            1           ; 1
+    push            Out         ; poner out
     Sub-Dword-Sp-Sp             ; restarle a out
-    Out-Dword       Out         ; ponerlo
+    stosd           Out         ; ponerlo
     Add-Dword-Sp-Inm 0          ; restaurar out
-    Lea-Dword       memcpy_siz  ; destino
-    Mov-Dword                   ; obtener dword
-    Push-Dword      Out         ; poner el out
+    lea             memcpy_siz  ; destino
+    lodsd                       ; obtener dword
+    push            Out         ; poner el out
     cmpsd           0, Sp          ; compara con terminador
-    Jmp-Word-Zero   M4          ; si es igual terminar
-    Jmp-Word-Clasic M_LOOP      ; loopear
+    jz short       M4          ; si es igual terminar
+    jmp short       M_LOOP      ; loopear
 M4:
     Add-Dword-Sp-Inm 0          ; recuperar out
-    Lea-Dword       Sp          ; recuperar px
+    lea             Sp          ; recuperar px
     jmp              Sp         ; retorno
 
 ; ===========================================
@@ -527,41 +528,41 @@ M4:
 ; ===========================================
 
 readsec:
-    Push-Dword      Px
-    Push-Dword      Out
+    push            Px
+    push            Out
 RS2:
-    Lea-Dword       cassete_readed_sector_finish ; la direccion
-    Out-Byte        0                       ; byte 0
-    Lea-Dword       cassete_external_cmd    ; comando
-    Out-Byte        CASSETE_READ_SECTA      ; lee un sector
-    Lea-Dword       cassete_sector_read_cmd ; la direccion
-    Push-Dword      Px                      ; guardar px
-    Lea-Dword       llbasect_sect_low       ; el alto
-    Mov-Byte                                ; obtener byte
-    Lea-Dword       Sp                      ; recuperar px
-    Ror-Byte        Ax, Out                 ; ah
-    Out-Byte        Out                     ; parte alta
-    Push-Dword      Px                      ; guardar px
-    Lea-Dword       llbasect_sect_high      ; el bajo
-    Mov-Byte                                ; obtener byte
-    Lea-Dword       Sp                      ; recuperar px
-    Ror-Byte        Bx, Out                 ; ah
-    Out-Byte        Ax                      ; xd
-    Ror-Byte        Ax, Ax                  ; xd
-    Out-Byte        Bx                      ; xd
+    lea             cassete_readed_sector_finish ; la direccion
+    stosb           0                       ; byte 0
+    lea             cassete_external_cmd    ; comando
+    stosb           CASSETE_READ_SECTA      ; lee un sector
+    lea             cassete_sector_read_cmd ; la direccion
+    push            Px                      ; guardar px
+    lea             llbasect_sect_low       ; el alto
+    lodsb                                   ; obtener byte
+    lea             Sp                      ; recuperar px
+    mov near        Ax, Out                 ; ah
+    stosb           Out                     ; parte alta
+    push            Px                      ; guardar px
+    lea             llbasect_sect_high      ; el bajo
+    lodsb                                   ; obtener byte
+    lea             Sp                      ; recuperar px
+    mov near        Bx, Out                 ; ah
+    stosb           Ax                      ; xd
+    mov near        Ax, Ax                  ; xd
+    stosb           Bx                      ; xd
 
 RS3:
     Hlt                         ; espera
-    Lea-Dword       cassete_readed_sector_finish ; la direccion
-    Mov-Byte                    ; mover byte
-    Push-Byte       1           ; 1
-    Push-Byte       Out         ; leer
-    Cmp-Byte-Sp-Sp              ; verificar
-    Jmp-Word-Zero   RS4         ; se logro leer
-    Jmp-Word-Clasic RS3         ; salta
+    lea             cassete_readed_sector_finish ; la direccion
+    lodsb                       ; mover byte
+    push near       1           ; 1
+    push near       Out         ; leer
+    cmpsb   Sp,Sp               ; verificar
+    jz short       RS4         ; se logro leer
+    jmp short       RS3         ; salta
 RS4:
     Add-Dword-Sp-Inm 0          ; recuperar out
-    Lea-Dword       Sp          ; recuperar px
+    lea             Sp          ; recuperar px
     jmp              Sp         ; retorno
 
 ; ===========================================
@@ -580,36 +581,36 @@ RS4:
 ; boton 'A'
 ;
 alpha_button_irq:
-    Push-Dword      Px
+    push            Px
     ; ... comming soon ...
-    Lea-Dword       Sp
+    lea             Sp
     jmp              Sp
 
 ; ===========================================
 ; boton 'B'
 ;
 beta_button_irq:
-    Push-Dword      Px
+    push            Px
     ; ... comming soon ...
-    Lea-Dword       Sp
+    lea             Sp
     jmp              Sp
 
 ; ===========================================
 ; boton 'UP'
 ;
 up_button_irq:
-    Push-Dword      Px
+    push            Px
     ; ... comming soon ...
-    Lea-Dword       Sp
+    lea             Sp
     jmp              Sp
 
 ; ===========================================
 ; boton 'DOWN'
 ;
 down_button_irq:
-    Push-Dword      Px
+    push            Px
     ; ... comming soon ...
-    Lea-Dword       Sp
+    lea             Sp
     jmp              Sp
 
 ; ===========================================
@@ -719,19 +720,19 @@ MA3302_KY1_KSTAT:   Byte 0
 ; obtener funciones si no datos o mas cosas
 ;
 cassete_irq:
-    Push-Dword      Px
-    Push-Dword      Out
-    Lea-Dword       cassete_external_cmd
+    push            Px
+    push            Out
+    lea             cassete_external_cmd
 
-    Mov-Byte
-    Push-Byte       Out
+    lodsb   
+    push near       Out
     Cmp-Byte-Inm-Sp CASSETE_WAITING_UE
-    Jmp-Word-Zero   cassete_fnc_inserted
+    jz short       cassete_fnc_inserted
     
-    Mov-Byte
-    Push-Byte       Out
+    lodsb   
+    push near       Out
     Cmp-Byte-Inm-Sp CASSETE_READ_SECTA
-    Jmp-Word-Zero   cassete_fnc_read_sector
+    jz short       cassete_fnc_read_sector
 
     jmp              cassete_fnc_end
 
@@ -739,15 +740,15 @@ cassete_irq:
 ; cuando leyo un sector
 ;
 cassete_fnc_read_sector:
-    Lea-Dword       cassete_readed_sector_finish
-    Out-Byte        1
+    lea             cassete_readed_sector_finish
+    stosb           1
     jmp              cassete_fnc_end
 
 ; ===========================================
 ; cuando se inserto un cassete
 ;
 cassete_fnc_inserted:
-    Lea-Dword       disk_inserted ; manda el mensaje
+    lea             disk_inserted ; manda el mensaje
     call            put_msg     ; pone el mensaje
     jmp              cassete_fnc_end
 
@@ -755,10 +756,10 @@ cassete_fnc_inserted:
 ; fin de la funcion de cassete
 ;
 cassete_fnc_end:
-    Lea-Dword       cassete_external_cmd
-    Out-Byte        0
+    lea             cassete_external_cmd
+    stosb           0
     Add-Dword-Sp-Inm 0
-    Lea-Dword       Sp
+    lea             Sp
     jmp              Sp
 
 ; ===========================================
@@ -779,92 +780,92 @@ cassete_fnc_end:
 ; ===========================================
 
 INT5_irq:
-    Push-Dword      Px          ; guardar
-    Push-Dword      Out         ; guardar
-    Push-Dword      Ax          ; guardar
-    Push-Dword      Bx          ; guardar
-    Push-Dword      Cx          ; guardar
-    Push-Dword      Al          ; guardar
-    Push-Dword      Ah          ; guardar
+    push            Px          ; guardar
+    push            Out         ; guardar
+    push            Ax          ; guardar
+    push            Bx          ; guardar
+    push            Cx          ; guardar
+    push            Al          ; guardar
+    push            Ah          ; guardar
 
-    Lea-Dword       MA3302_Current_KY ; direccion
-    Mov-Byte                    ; obtener byte
-    Ror-Byte        Ax, Out     ; guardar
+    lea             MA3302_Current_KY ; direccion
+    lodsb                       ; obtener byte
+    mov near        Ax, Out     ; guardar
 
     ; MA3302.KY1 Controller - Controlador de teclado
     cmpsb            Ax, 02Ch ; controlador de KY1
     jz              M3KY1_Hand ; manejar
 
 INT5_end:
-    Ror-Dword       Ah, Sp      ; recuperar
-    Ror-Dword       Al, Sp      ; recuperar
-    Ror-Dword       Cx, Sp      ; recuperar
-    Ror-Dword       Bx, Sp      ; recuperar
-    Ror-Dword       Ax, Sp      ; recuperar
-    Ror-Dword       Out, Sp     ; recuperar
-    Ror-Dword       Px, Sp      ; recuperar
+    mov             Ah, Sp      ; recuperar
+    mov             Al, Sp      ; recuperar
+    mov             Cx, Sp      ; recuperar
+    mov             Bx, Sp      ; recuperar
+    mov             Ax, Sp      ; recuperar
+    mov             Out, Sp     ; recuperar
+    mov             Px, Sp      ; recuperar
     jmp              Sp         ; retorno
 
 M3KY1_Hand:
-    Lea-Dword       MA3302_KY1_KINDEX ; indice
-    Mov-Byte                    ; obtener
-    Ror-Byte        Bx, Out     ; copiar indice
-    Ror-Dword       Cx, char_map ; mapa
-    Push-Dword      Cx
-    Push-Dword      Bx
+    lea             MA3302_KY1_KINDEX ; indice
+    lodsb                       ; obtener
+    mov near        Bx, Out     ; copiar indice
+    mov             Cx, char_map ; mapa
+    push            Cx
+    push            Bx
     Add-Dword-Sp-Sp             ; añadir
-    Ror-Dword       Cx, Out     ; copiar
-    Lea-Dword       Cx          ; direccion
-    Mov-Byte                    ; obtener
-    Ror-Byte        Bx, Out     ; obtener byte
+    mov             Cx, Out     ; copiar
+    lea             Cx          ; direccion
+    lodsb                       ; obtener
+    mov near        Bx, Out     ; obtener byte
 
     call           KEYB_BUF_FULL ; verificar si esta vacio
     jz              INT5_end    ; terminar
 
-    Ror-Dword       Cx, KEYB_BUF ; leer el buffer
-    Lea-Dword       KEYB_SHEAD  ; obtener
-    Mov-Byte                    ; obtener
-    Ror-Byte        Ax, Out     ; guardar
-    Push-Dword      Cx          ; evitar el bug otra vez
+    mov             Cx, KEYB_BUF ; leer el buffer
+    lea             KEYB_SHEAD  ; obtener
+    lodsb                       ; obtener
+    mov near        Ax, Out     ; guardar
+    push            Cx          ; evitar el bug otra vez
     Add-Dword-Reg-Sp Ax         ; guardar
-    Lea-Dword       Out         ; el buffer y indice
-    Out-Byte        Bx          ; guardar el indice de caracter
+    lea             Out         ; el buffer y indice
+    stosb           Bx          ; guardar el indice de caracter
     call           KEYB_BUF_CALCI ; calcular
-    Lea-Dword       KEYB_SHEAD  ; direccion
-    Out-Byte        Ax          ; guardar resultado
+    lea             KEYB_SHEAD  ; direccion
+    stosb           Ax          ; guardar resultado
 
     jmp              INT5_end   ; finalizar
 
 ; ((scancodeskey_head + 1) % KEYBUF_SIZE) == scancodeskey_tail
 KEYB_BUF_FULL:
-    Lea-Dword       KEYB_SHEAD  ; direccion
-    Mov-Byte                    ; obtener byte
+    lea             KEYB_SHEAD  ; direccion
+    lodsb                       ; obtener byte
     Add-Byte-Reg-Inm Out, 1     ; añadir 1
     Mod-Byte-Reg-Inm Out, KEYBUF_SIZE ; modular
-    Lea-Dword       KEYB_STAIL  ; obtener
-    Ror-Byte        Al, Out     ; guardar
-    Mov-Byte                    ; obtener byte
-    Ror-Byte        Ax, Out     ; guardar
-    Push-Byte       Ax          ; para solucionar un bug
-    Cmp-Byte-Reg-Sp Al          ; comparaar
+    lea             KEYB_STAIL  ; obtener
+    mov near        Al, Out     ; guardar
+    lodsb                       ; obtener byte
+    mov near        Ax, Out     ; guardar
+    push near       Ax          ; para solucionar un bug
+    cmpsb           Al, Sp      ; comparar
     jmp              Sp         ; retorno
 
 ; ((scancodeskey_head + 1) % KEYBUF_SIZE)
 KEYB_BUF_CALCI:
-    Lea-Dword       KEYB_SHEAD  ; direccion
-    Mov-Byte                    ; obtener byte
+    lea             KEYB_SHEAD  ; direccion
+    lodsb                       ; obtener byte
     Add-Byte-Reg-Inm Out, 1     ; añadir 1
     Mod-Byte-Reg-Inm Out, KEYBUF_SIZE ; modular
-    Ror-Byte        Ax, Out     ; guardar
+    mov near        Ax, Out     ; guardar
     jmp              Sp         ; retorno
 
 KEYB_BUF_EMPTY:
-    Lea-Dword       KEYB_SHEAD  ; direccion
-    Mov-Byte                    ; obtener
-    Ror-Byte        Ah, Out     ; header
-    Lea-Dword       KEYB_STAIL  ; direccion
-    Mov-Byte                    ; obtener
-    Ror-Byte        Al, Out     ; header
+    lea             KEYB_SHEAD  ; direccion
+    lodsb                       ; obtener
+    mov near        Ah, Out     ; header
+    lea             KEYB_STAIL  ; direccion
+    lodsb                       ; obtener
+    mov near        Al, Out     ; header
     Cmp-Byte-Reg-Reg Ah, Al     ; comparar head con tail
     jmp              Sp         ; retorno
 

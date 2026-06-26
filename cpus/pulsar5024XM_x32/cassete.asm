@@ -21,7 +21,7 @@ S1                      Equ 95001       ; zona segura para el stage2
 
 ; =================== tabla de particion ===================
 _start:
-    Jmp-Word-Clasic     _l              ; jump label
+    jmp short           _l              ; jump label
     Align               8               ; o
     Byte                'C','A','S','S','E','T','E','0',' ',' ',' ',' '
     Dword               0               ; cantidad de sectores, 0=indefinido
@@ -37,20 +37,20 @@ _l:
     jmp                 [C1 In S1] ; saltar
 C1:
     ; imprimir identificador
-    Ror-Byte            Ax, 1Eh         ; el servicio
-    Ror-Dword           Bx, msg         ; la frase
+    mov near            Ax, 1Eh         ; el servicio
+    mov                 Bx, msg         ; la frase
     Int-Byte            10h             ; el int
 
     ; leer sector
-    Ror-Byte            Ax, 02h         ; funcion
-    Ror-Byte            Bx, 1           ; sector
-    Ror-Byte            Cx, 00h         ; fs
-    Ror-Dword           Dx, 024000h     ; memoria
+    mov near            Ax, 02h         ; funcion
+    mov near            Bx, 1           ; sector
+    mov near            Cx, 00h         ; fs
+    mov                 Dx, 024000h     ; memoria
     Int-Byte            12h             ; el int
     jmp                 024000h         ; sector2
     
 msg:
-    Assume-Byte         'm','m','f','s','0',0
+    Byte                'm','m','f','s','0',0
 
 ; =====================================
 ;       STAGE2 CODE
@@ -64,32 +64,32 @@ Stage2Sector:
     jmp                 [024000h Segment Stage2Sector:Stage2Data]
 Stage2Data:
 test:
-    Assume-Byte 'm','m','f','s','1',0
+    Byte                'm','m','f','s','1',0
 Stage2Code:
     ; imprimir identificador
-    Ror-Byte            Ax, 1Eh         ; el servicio
-    Ror-Dword           Bx, [024000h segment Stage2Sector:test] ; la frase
+    mov near            Ax, 1Eh         ; el servicio
+    mov                 Bx, [024000h segment Stage2Sector:test] ; la frase
     Int-Byte            10h             ; el int
 
-    Ror-Byte            Ax, 02h         ; funcion
-    Ror-Byte            Bx, 2           ; sector
-    Ror-Byte            Cx, 00h         ; fs
-    Ror-Dword           Dx, 041000h     ; memoria
+    mov near            Ax, 02h         ; funcion
+    mov near            Bx, 2           ; sector
+    mov near            Cx, 00h         ; fs
+    mov                 Dx, 041000h     ; memoria
     Int-Byte            12h             ; el int
 
-    Ror-Byte            Ax, 03h         ; el servicio
-    Ror-Dword           Bx, 041000h     ; direccion de la imagen
-    Ror-Byte            Cx, 70h         ; X
-    Ror-Byte            Dx, 70h         ; Y
+    mov near            Ax, 03h         ; el servicio
+    mov                 Bx, 041000h     ; direccion de la imagen
+    mov near            Cx, 70h         ; X
+    mov near            Dx, 70h         ; Y
     Int-Byte            10h             ; el int
 
 LOOP:
     Hlt 
-    Ror-Byte            Ax, 01h         ; funcion del teclado
+    mov near            Ax, 01h         ; funcion del teclado
     Int-Byte            16h             ; la int misceliana
 
-    Ror-Byte            Ax, 0Eh         ; el putchar
-    Ror-Byte            Bx, Ah         ; el caracter
+    mov near            Ax, 0Eh         ; el putchar
+    mov near            Bx, Ah         ; el caracter
     Int-Byte            10h             ; del display
     
     jmp                 [024000h segment Stage2Sector:LOOP] ; saltar
