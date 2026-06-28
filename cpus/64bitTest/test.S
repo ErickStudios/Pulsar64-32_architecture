@@ -2,8 +2,8 @@ org32
 
 vectors: Dword start        ; vector de arranque
 
-Mode32 EQU 01h ; modo de ejecucion
-Mode64 EQU 02h ; modo de ejecucion
+Mode32 EQU 00h ; modo de ejecucion
+Mode64 EQU 01h ; modo de ejecucion
 
     Byte 0
 start:                      ; alinear a 3
@@ -46,12 +46,13 @@ start:                      ; alinear a 3
 
     jifeq       i(02h)      ; saltar al inmediato 2 (01 FF 3[BitToBeTruthyFor] TI)
 
-    jmp
     add         r0, 4, 5    ; xd  
 
 TestEqual:
     add         r0, 1, 2    ; xd  
     
+    int         00h         ; lanzar int
+
     Align       128 Byte 0
     Align       128
 STACK_TOP:
@@ -120,5 +121,9 @@ ProgramsSafeZone:
     Align 512 Byte  0
 EndProgramSafeZone:
 
+    org32
 isr1:
-    rstinm                  ; resetear el inm que se esta editando
+    Push-Dword          10  ; probar
+    Ror-Dword           Ax, Sp ; recuperar
+    Iret                    ; instruccion especial para retornar el contexto
+    ;rstinm                  ; resetear el inm que se esta editando

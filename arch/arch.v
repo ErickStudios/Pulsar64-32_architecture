@@ -562,31 +562,68 @@ begin
 end
 endfunction
 
+task saveThingInStack64;
+input [63:0] data;
+begin
+    xsp = xsp - 8;
+    memory[xsp]     = data[63:56];
+    memory[xsp + 1] = data[55:48];
+    memory[xsp + 2] = data[47:40];
+    memory[xsp + 3] = data[39:32];
+    memory[xsp + 4] = data[31:24];
+    memory[xsp + 5] = data[23:16];
+    memory[xsp + 6] = data[15:8];
+    memory[xsp + 7] = data[7:0];
+end endtask
+
 task saveDir64; begin
     xsp = xsp - 8;
-    memory[xsp]     = pc[63:56];
-    memory[xsp + 1] = pc[55:48];
-    memory[xsp + 2] = pc[47:40];
-    memory[xsp + 3] = pc[39:32];
-    memory[xsp + 4] = pc[31:24];
-    memory[xsp + 5] = pc[23:16];
-    memory[xsp + 6] = pc[15:8];
-    memory[xsp + 7] = pc[7:0];
+    memory[xsp]     = xpc[63:56];
+    memory[xsp + 1] = xpc[55:48];
+    memory[xsp + 2] = xpc[47:40];
+    memory[xsp + 3] = xpc[39:32];
+    memory[xsp + 4] = xpc[31:24];
+    memory[xsp + 5] = xpc[23:16];
+    memory[xsp + 6] = xpc[15:8];
+    memory[xsp + 7] = xpc[7:0];
 end endtask
 
 task irqJmp64;
 input [31:0] irqId;
 begin
+    i64a = (
+        (i64perms[23:0] << 9) |
+        (flags << 1) |
+        in64Bit
+        );
+    saveThingInStack64(i64a);
     saveDir64();
     i64irqsft = irqId;
     i64perms =  readInm64Max(LvlDescSizeField,`i64isprivInd + LvlDescPermsOff);
     xpc      = `i64isfunc;
+    pc       = xpc[31:0];
+    i64temp  = `i64isisau;
+    in64Bit  = i64temp[0];
+end
+endtask
+
+task irqRet64;
+begin
+    xpc = readInm64Max(8, xsp);
+    pc = xpc[31:0];
+    xsp = xsp + 8;
+    i64a = readInm64Max(8, xsp);
+    xsp = xsp + 8;
+
+    i64perms = i64a[23:9];
+    flags = i64a[8:1];
+    in64Bit = i64a[0];
 end
 endtask
 
 task irqHandler64; 
 begin
-    if (!quiet) $write("%d (%8x) ",pc - 1, pc);
+    if (!quiet) $write("%d (%8x) ",xpc[31:0] - 4, xpc[31:0]);
     if (!quiet) $display("HRD I64 %0d %0d", irq_addr, irq_data);
     paused = 0;
     irq_ack <= 1; 
@@ -657,6 +694,7 @@ always @(posedge clk) begin
                 i64bytes[2] <= memory[xpc + 2];
                 i64bytes[3] <= memory[xpc + 3];
                 xpc <= xpc + 4;
+                pc <= xpc[31:0];
                 i64pend <= 1;
             end
             else begin
@@ -705,8 +743,15 @@ always @(posedge clk) begin
                             endcase
                             if (!quiet) $display("JMP TO %0d IF FLAG %0d", i64temp, i64bytes[2][3:0]);
 
-                            if (i64a) xpc = i64temp;
+                            if (i64a) begin 
+                                xpc = i64temp;
+                                pc <= xpc[31:0];
+                             end
                         end // jmp if a condition is true
+                        else if (i64bytes[2] == 8'h03) begin
+                            $display("INT %0d", i64bytes[3]);
+                            irqJmp64(i64bytes[3]);
+                        end // interruption
                         else if (i64bytes[2] == 8'hFF) begin
                             if (i64bytes[3] == 8'h01) begin
                                 inms64[selectedinm64] <= 0;
@@ -803,8 +848,14 @@ always @(posedge clk) begin
                 8'h0A: ex_wrx();
                 // DBGAC64
                 8'h0B: begin 
+                    $display("NULL0      CH64");
                     xpc = pc;
                     in64Bit <= 1; 
+                end
+                // IRET
+                8'h0C: begin
+                    $display("NULL0      IRET");
+                    irqRet64();
                 end
             endcase
         end

@@ -524,6 +524,10 @@ export function AssembleLineWithoutContext(line, ctx, len=null) {
     else if (ctx.in64 && peek7() === 'LD16') {
       parseLoadAddr(2);
     }
+    else if (ctx.in64 && peek7() === 'INT') {
+      consume();
+      result.push(1, 0xFF, 0x3, consume().value);
+    }
     else if (ctx.in64 && peek7() === 'RSTINM') {
       consume(); 
       result.push(1, 0xFF, 0xFF, 1);
@@ -559,7 +563,9 @@ export function AssembleLineWithoutContext(line, ctx, len=null) {
     else if (ctx.in64 && peek7() === 'JIPOS') parseJmpIfFlag64(2);
     else if (ctx.in64 && peek7() === 'JITRUE') parseJmpIfFlag64(3);
     else if (ctx.in64 && peek7() === 'JMP') parseJmpIfFlag64(3);
-
+    else if (!ctx.in64 && peek7() === 'IRET') {
+      consume(); result.push(0xC);
+    }
     else if (ctx.in64 && peek7() === 'ADDINMB2') {
       consume(); 
       result.push(
