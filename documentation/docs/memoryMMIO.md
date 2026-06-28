@@ -1,4 +1,6 @@
-![pulsar5024XM_x32](../logo.png)
+<div style="display: flex; justify-content: center;">
+  <img src="./../logo.svg" alt="Logo" width="100">
+</div>
 
 # MMIO en pulsar
 

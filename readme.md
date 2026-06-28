@@ -1,6 +1,10 @@
-![pulsar5024XM_x32](documentation/logo.png)
+<div style="display: flex; justify-content: center;">
+  <img src="documentation/logo.svg" alt="Logo" width="100">
+</div>
 
-**pulsar5024XM_x32** es un procesador de **32 bits** hecho por ErickCraftStudios, es un procesador con pocas instrucciones pero muy descriptivas, tambien tiene su propio ensamblador.
+# Pulsar 64&32 Architecture
+
+La arquitectura **Pulsar 64&32** es una arquitectura mixta de 32/64 **bits** hecho por ErickCraftStudios, esta arquitectura esta diseñada para ser rapida, de bajo consumo y ser amigable para los usuarios nuevos y facil de implementar
 
 puede hecharle un vistaso a nuestra documentacion listada en este documento a continuacion, **puede que este incompleta ya que recientemente se inicio**, asi que sea paciente que actualizaremos periodicamente la documentacion
 

@@ -310,6 +310,17 @@ reg                 paused;
 reg [1:0]           CWFDD;
 reg [1:0]           CWFDM;
 
+// ============== 64 Bit Behavior ==============
+reg                 in64Bit;
+reg [63:0]          inms64 [0:15];
+reg [7:0]           selectedinm64;
+reg [63:0]          i64CpuTbl, i64a, i64b, i64memre, i64temp, xsp, x0, x1, x2, x3, x4, x5, x6, x7;
+reg [7:0]           i64bytes [0:3];
+reg                 i64pend = 0;
+reg [3:0]           i64inmba = 0;
+reg [3:0]           i64bysiz = 0;
+reg [3:0]           i64opr = 0;
+
 // ============== alu components ==============
 reg  [31:0]         aluA;
 reg  [31:0]         aluB;
@@ -433,6 +444,7 @@ task general_reset; begin
         memory[2],
         memory[3]
     };
+    in64Bit <= 0;
     sp = 95000;
     ir = 0;
     paused = 0;
@@ -698,6 +710,150 @@ task irq_check; begin
     pc = irq_vector;
 end endtask
 
+// ================= 64 bit ISA mode in action =================
+// el procesador al entrar al modo de 64 bits arregla todas sus
+// equivocaciones y hace lo que siempre quiso ser pero, no lo puede
+// hacer en el modo de 32 bits por que romperia compatibilidad
+
+task solveReg64bit;
+input [3:0] regCode;
+output [63:0] regVal;
+begin 
+    case (regCode)
+    2: regVal = xsp;
+    3: regVal = x0;
+    4: regVal = x1;
+    5: regVal = x2;
+    6: regVal = x3;
+    7: regVal = x4;
+    8: regVal = x5;
+    9: regVal = x6;
+    endcase
+end endtask
+
+task set64BitReg;
+input [3:0] regCode;
+input [63:0] regVal;
+begin 
+    case (regCode)
+    2: xsp  = regVal;
+    3: x0   = regVal;
+    4: x1   = regVal;
+    5: x2   = regVal;
+    6: x3   = regVal;
+    7: x4   = regVal;
+    8: x5   = regVal;
+    9: x6   = regVal;
+    endcase
+end
+endtask
+
+function [63:0] readInm64Max; 
+input [7:0] bytesLen; 
+input [63:0] baseAddr; 
+begin
+    case (bytesLen)
+        1: readInm64Max = memory[baseAddr];
+        2: readInm64Max = {
+            memory[baseAddr],
+            memory[baseAddr + 1]
+            };
+        4: readInm64Max = {
+            memory[baseAddr],
+            memory[baseAddr + 1],
+            memory[baseAddr + 2],
+            memory[baseAddr + 3]
+            };
+        8: readInm64Max = {
+            memory[baseAddr],
+            memory[baseAddr + 1],
+            memory[baseAddr + 2],
+            memory[baseAddr + 3],
+            memory[baseAddr + 4],
+            memory[baseAddr + 5],
+            memory[baseAddr + 6],
+            memory[baseAddr + 7]
+            };
+        default: readInm64Max = 0;
+    endcase
+end endfunction
+
+localparam CpuIntDescIInTbl = 0;
+localparam CpuLvlSetsIInTbl = 1;
+localparam CpuIOMIInTbl     = 2;
+
+localparam IdtDescPartSize  = 16;
+localparam LevelPrivSize    = 8;
+
+localparam IdtDescIsaOffset = 0;
+localparam IdtDescPrivOffset= 4;
+localparam IdtDescFuncOffset= 8;
+
+localparam LvlDescSizeField = 8;
+localparam LvlDescNField    = 2;
+localparam LvlDescPermsOff  = LvlDescSizeField * 1;
+localparam LvlDescSize      = LvlDescSizeField * LvlDescNField;
+
+reg  [63:0] i64irqsft     = 64'hFFFFFFFFFFFFFFFF;
+reg  [63:0] i64perms      = 64'hFFFFFFFFFFFFFFFF;
+reg  [63:0] xpc           = 0;
+
+`define i64intTable     CpuTableEntry(CpuIntDescIInTbl)
+`define i64levelTable   CpuTableEntry(CpuLvlSetsIInTbl)
+`define i64permTable    CpuTableEntry(CpuIOMIInTbl)
+
+`define i64ihrdptr      (`i64intTable + (irq_addr * IdtDescPartSize))
+`define i64isrdptr      (`i64intTable + (i64irqsft * IdtDescPartSize))
+
+`define i64ihisau       readInm64Max(4, `i64ihrdptr + IdtDescIsaOffset)
+`define i64ihpriv       readInm64Max(4, `i64ihrdptr + IdtDescPrivOffset)
+`define i64ihfunc       readInm64Max(8, `i64ihrdptr + IdtDescFuncOffset)
+`define i64ihprivInd    `i64levelTable + (`i64ihpriv * LevelPrivSize)
+
+`define i64isisau       readInm64Max(4, `i64isrdptr + IdtDescIsaOffset)
+`define i64ispriv       readInm64Max(4, `i64isrdptr + IdtDescPrivOffset)
+`define i64isfunc       readInm64Max(8, `i64isrdptr + IdtDescFuncOffset)
+`define i64isprivInd    `i64levelTable + (`i64ispriv * LevelPrivSize)
+
+function [63:0] CpuTableEntry;
+input [31:0] index;
+begin
+    CpuTableEntry = readInm64Max(8, i64CpuTbl + (index * 8));
+end
+endfunction
+
+task saveDir64; begin
+    xsp = xsp - 8;
+    memory[xsp]     = pc[63:56];
+    memory[xsp + 1] = pc[55:48];
+    memory[xsp + 2] = pc[47:40];
+    memory[xsp + 3] = pc[39:32];
+    memory[xsp + 4] = pc[31:24];
+    memory[xsp + 5] = pc[23:16];
+    memory[xsp + 6] = pc[15:8];
+    memory[xsp + 7] = pc[7:0];
+end endtask
+
+task irqJmp64;
+input [31:0] irqId;
+begin
+    saveDir64();
+    i64irqsft = irqId;
+    i64perms =  readInm64Max(LvlDescSizeField,`i64isprivInd + LvlDescPermsOff);
+    xpc      = `i64isfunc;
+end
+endtask
+
+task irqHandler64; 
+begin
+    if (!quiet) $write("%d (%8x) ",pc - 1, pc);
+    if (!quiet) $display("HRD I64 %0d %0d", irq_addr, irq_data);
+    paused = 0;
+    irq_ack <= 1; 
+    irqJmp64(irq_addr);
+end 
+endtask
+
 // ============== function for clock ==============
 // | This functions keeps on the machine for make |
 // | it makes things                              |
@@ -733,7 +889,7 @@ always @(posedge clk) begin
         CWFDM = 0;
     // tick of click
     end else begin
-
+        
         if (mem_wrt_bool) begin
             memory[mem_wrt_addr] <= mem_wrt_val;
         end
@@ -746,38 +902,172 @@ always @(posedge clk) begin
         alu_check();
 
         if (irq && !irq_ack) begin
-            irq_check();
+            if (in64Bit) irqHandler64();
+            else irq_check();
         end else if (!paused && !aluState) begin
         irq_ack <= 0;
 
         // fetch instruction
         ir = memory[pc];                           // current instruction
-        pc = pc + 1;                               // increment program counter
 
-        if (!quiet) $write("%d (%8x) ",pc - 1, pc);
-        case (ir)
-            // LPX = Load Pointer eXpretion
-            8'h01: 
-                ex_lpx();
-            // LDX = Load From memory To Data RegiXter (Data Register = valueRegister beta name)
-            8'h02: ex_ldx();
-            // PUS = Push Unity or regiSter
-            8'h03: ex_pus();
-            // OPR = Operation Propurse with Result
-            8'h04: ex_opr();
-            // HLT = Halt main Tread
-            8'h05: begin if (!quiet) $display("NULL0      HLT"); paused = 1; end
-            // CMP = Compare Multi Parse
-            8'h06: ex_cmp();
-            // JMP = Jump Multi Templates
-            8'h07: ex_jmp();
-            // SDX = Save Data RegiXters to memory
-            8'h08: ex_sdx();
-            // INT = software INTerruption
-            8'h09: ex_int();
-            // WRX = WRite regiXter
-            8'h0A: ex_wrx();
-        endcase
+        if (in64Bit) begin
+            if (!i64pend) begin
+                i64bytes[0] <= memory[xpc];
+                i64bytes[1] <= memory[xpc + 1];
+                i64bytes[2] <= memory[xpc + 2];
+                i64bytes[3] <= memory[xpc + 3];
+                xpc <= xpc + 4;
+                i64pend <= 1;
+            end
+            else begin
+                if (!quiet) $write("%d (%8x) ",xpc[31:0] - 4, xpc[31:0] - 4);
+                i64pend <= 0;
+
+                if ((i64bytes[0] & 8'hF0) == 8'h20) begin
+                    i64opr = i64bytes[0][3:0];
+                    case (i64bytes[1][3:2])
+                    0: solveReg64bit(i64bytes[2][3:0], i64a);
+                    1: i64a = inms64[i64bytes[2]];
+                    2: i64a = i64bytes[2];
+                    endcase
+                    case (i64bytes[1][1:0])
+                    0: solveReg64bit(i64bytes[3][3:0], i64b);
+                    1: i64b = inms64[i64bytes[3]];
+                    2: i64b = i64bytes[3];
+                    endcase
+                    case (i64opr)
+                        0: i64temp = i64a + i64b;
+                        1: i64temp = i64a - i64b;
+                        2: i64temp = i64a * i64b;
+                        3: i64temp = i64a / i64b;
+                    endcase
+                    set64BitReg(i64bytes[1][7:4], i64temp);
+                    solveReg64bit(i64bytes[1][7:4], i64temp);
+                    $display("OPERATION%0d %0d ((%0d)%0d (%0d)%0d) = %0d", i64opr, i64bytes[0][7:4], i64bytes[1][3:2], i64a, i64bytes[1][1:0], i64b, i64temp); 
+                end // operations
+                else begin case (i64bytes[0]) 
+                8'h01: begin
+                    if (i64bytes[1] == 8'hFF) begin
+                        if (i64bytes[2] == 8'h1) begin
+                            selectedinm64 <= i64bytes[3];
+                            if (!quiet) $display("INM SLT %0d", i64bytes[3]);
+                        end // select inm id
+                        else if (i64bytes[2] == 8'h2) begin
+                            solveReg64bit(i64bytes[3][3:0],i64CpuTbl);
+                            if (!quiet) $display("SETCPUTBL %0d", i64CpuTbl);
+                        end // set cpu table
+                        else if ((i64bytes[2] & 8'hF0) == 8'h30) begin
+                            i64a = flags[i64bytes[2][3:0]];
+                            i64opr = i64bytes[3][7:4];
+                            case (i64opr)
+                                0: solveReg64bit(i64bytes[3][3:0], i64temp);
+                                1: i64temp = inms64[i64bytes[3][3:0]];
+                            endcase
+                            if (!quiet) $display("JMP TO %0d IF FLAG %0d", i64temp, i64bytes[2][3:0]);
+
+                            if (i64a) xpc = i64temp;
+                        end // jmp if a condition is true
+                        else if (i64bytes[2] == 8'hFF) begin
+                            if (i64bytes[3] == 8'h01) begin
+                                inms64[selectedinm64] <= 0;
+                                if (!quiet) $display("INM RST %0d", selectedinm64);
+                            end // reset inm
+                            else if ((i64bytes[3] & 8'hF0) == 8'h20) begin
+                                solveReg64bit(i64bytes[3][3:0], i64a);
+
+                                flags = 0;
+                                if (i64a == 0) flags[0] = 1;
+                                if (i64a[63] == 1) flags[1] = 1;
+                                if (i64a > 0 && i64a[63] == 0) flags[2] = 1;
+                                flags[3] = 1;
+
+                                if (!quiet) $display("CALC %0d NEW FLAGS %0d", i64a, flags);
+
+                            end // calculate thing
+                        end // extend ins to pad
+                    end // extend ins to pad
+                    else if ((i64bytes[1] & 8'hF0) == 8'h10) begin
+                        i64inmba = i64bytes[1][3:0];
+                        if (!quiet) $write("INM BLD %0d TO %0d [", i64inmba , selectedinm64);
+
+                        inms64[selectedinm64] = (
+                            (inms64[selectedinm64] << 8) | i64bytes[2]
+                        );
+                        if (!quiet) $write("%0d",i64bytes[2]);
+                        if (i64inmba == 2) begin
+                            inms64[selectedinm64] = (
+                                (inms64[selectedinm64] << 8) | i64bytes[3]
+                            );
+                            if (!quiet) $write(",%0d", i64bytes[3]);
+                        end // extend to more
+                        if (!quiet) $write("]\n");
+                    end // add bytes
+                    else if (((i64bytes[1] & 8'hF0) == 8'h40)) begin
+                        if (!quiet) $display("INM LDX %0d FROM %0d", i64bytes[2][3:0] , inms64[i64bytes[3]]);
+                        set64BitReg(i64bytes[2][3:0], inms64[i64bytes[3]]);
+                    end // load to reg
+                    else if (((i64bytes[1] & 8'hF0) == 8'h30)) begin
+                        i64bysiz = i64bytes[1][3:0];
+                        i64opr = i64bytes[2][7:4];
+                        case (i64opr)
+                            0: solveReg64bit(i64bytes[2][3:0], i64temp);
+                            1: i64temp = inms64[i64bytes[2][3:0]];
+                        endcase
+                        inms64[i64bytes[3]] = readInm64Max(i64bysiz, i64temp);
+
+                        if (!quiet) $display("INM LFM STEPS %0d OF %0d TO %0d (%0d)", i64bysiz , i64temp, i64bytes[3], inms64[i64bytes[3]]);
+                    end // load from mem
+                end // inms manager
+                8'h02: begin
+                    if ((i64bytes[1] & 8'hF0) == 8'h10) begin
+                        solveReg64bit(i64bytes[1][3:0], i64memre);
+                        i64bysiz = i64bytes[2][7:4];
+                        i64opr   = i64bytes[2][3:0];
+                        case (i64opr)
+                            0: solveReg64bit(i64bytes[3][3:0], i64temp);
+                            1: i64temp = inms64[i64bytes[3][3:0]];
+                        endcase
+                        if (!quiet) $display("MEM WRT AT %0d STEPS %0d DATA %0d", i64memre ,i64bysiz, i64temp);
+                        for (i = 0; i < i64bysiz; i = i + 1) begin
+                            write_mem_byte(i64memre + i, (i64temp >> (8 * (i64bysiz - 1 - i))) & 8'hFF);
+                        end
+                    end // mem write
+                end // mem 
+                endcase end // other
+            end
+            
+        end
+        else begin
+            pc = pc + 1;                               // increment program counter
+            if (!quiet) $write("%d (%8x) ",pc - 1, pc);
+            case (ir)
+                // LPX = Load Pointer eXpretion
+                8'h01: ex_lpx();
+                // LDX = Load From memory To Data RegiXter (Data Register = valueRegister beta name)
+                8'h02: ex_ldx();
+                // PUS = Push Unity or regiSter
+                8'h03: ex_pus();
+                // OPR = Operation Propurse with Result
+                8'h04: ex_opr();
+                // HLT = Halt main Tread
+                8'h05: begin if (!quiet) $display("NULL0      HLT"); paused = 1; end
+                // CMP = Compare Multi Parse
+                8'h06: ex_cmp();
+                // JMP = Jump Multi Templates
+                8'h07: ex_jmp();
+                // SDX = Save Data RegiXters to memory
+                8'h08: ex_sdx();
+                // INT = software INTerruption
+                8'h09: ex_int();
+                // WRX = WRite regiXter
+                8'h0A: ex_wrx();
+                // DBGAC64
+                8'h0B: begin 
+                    xpc = pc;
+                    in64Bit <= 1; 
+                end
+            endcase
+        end
     end
     end
     $fflush();

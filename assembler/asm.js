@@ -8,7 +8,6 @@ export class Context {
     this.in64 = false;
   }
 }
-
 export function tokenize(code) {
   const tokens = [];
   let i = 0;
@@ -93,7 +92,7 @@ export function toBigEndianBytes(n, x) {
   let bytes = [];
   while (n > 0) {
     bytes.push(n & 0xFF);
-    n = n >> 8;
+    n = n >>> 8;
   }
   bytes.reverse();
   while (bytes.length < x) {
@@ -141,6 +140,7 @@ export function AssembleLineWithoutContext(line, ctx, len=null) {
       case 'BYTE': return 1;
       case 'WORD': return 2;
       case 'DWORD': return 4;
+      case 'QWORD': return 8;
     }
   }
   function parsePrimary() {
@@ -392,6 +392,20 @@ export function AssembleLineWithoutContext(line, ctx, len=null) {
     }
     return { t:'s', s:parse64bitReg() };
   }
+  function parseJmpIfFlag64(flag) {
+    consume(); 
+    let expr = parse64bitExpr();
+    result.push(
+      1, 0xFF, 0x30 | flag 
+    );
+
+    if (expr.t === 's') {
+      result.push(0 | expr.s);
+    }
+    else if (expr.t === 'i') {
+      result.push(0x10 | expr.i);
+    }
+  }
   function parseInmFromMem(sizeof) {
     // (01 OS TA [To])
     consume();
@@ -429,11 +443,10 @@ export function AssembleLineWithoutContext(line, ctx, len=null) {
     x(expr1, expr1n);
     x(expr2, expr2n);
 
-    console.log(expr1n, expr2n)
-
     let nib = (expr1n[0] << 2) | expr2n[0];
     let coda = (rega << 4) | nib;
     result.push(coda, expr1n[1], expr2n[1]);
+    console.log(coda);
   }
   function parseMemWrite(sizeof) {
     // [OP] MA ST [DT] 
@@ -465,6 +478,9 @@ export function AssembleLineWithoutContext(line, ctx, len=null) {
       })
 
       result.push(...AssembleLineWithoutContext(codeExpand, ctx, len));
+  }
+  function parseCalc() {
+    
   }
   while (i < tokens.length) {
     if (!ctx.in64 && peek7() === 'PUSH') {
@@ -512,6 +528,10 @@ export function AssembleLineWithoutContext(line, ctx, len=null) {
       consume(); 
       result.push(1, 0xFF, 0xFF, 1);
     }
+    else if (ctx.in64 && peek7() === 'CALC') {
+      consume(); 
+      result.push(1, 0xFF, 0xFF, 0x20 | parse64bitReg());
+    }
     else if (ctx.in64 && peek7() === 'MWR8') parseMemWrite(1);
     else if (ctx.in64 && peek7() === 'MWR16') parseMemWrite(2);
     else if (ctx.in64 && peek7() === 'MWR32') parseMemWrite(4);
@@ -526,6 +546,19 @@ export function AssembleLineWithoutContext(line, ctx, len=null) {
     else if (ctx.in64 && peek7() === 'SUB') parse64bitOperation(1);
     else if (ctx.in64 && peek7() === 'MUL') parse64bitOperation(2);
     else if (ctx.in64 && peek7() === 'DIV') parse64bitOperation(3);
+
+    else if (ctx.in64 && peek7() === 'LTBL') {
+      consume(); 
+      result.push(
+        1, 0xFF, 0x02, parse64bitReg(), 
+      );
+    }
+
+    else if (ctx.in64 && peek7() === 'JIFEQ') parseJmpIfFlag64(0);
+    else if (ctx.in64 && peek7() === 'JINEG') parseJmpIfFlag64(1);
+    else if (ctx.in64 && peek7() === 'JIPOS') parseJmpIfFlag64(2);
+    else if (ctx.in64 && peek7() === 'JITRUE') parseJmpIfFlag64(3);
+    else if (ctx.in64 && peek7() === 'JMP') parseJmpIfFlag64(3);
 
     else if (ctx.in64 && peek7() === 'ADDINMB2') {
       consume(); 
@@ -853,4 +886,14 @@ export function AssembleCode(code) {
     len += lineAssembled.length;
   })
   return { result, context };
+}
+export class LibraryAssembler {
+  static asm = class {
+    static assembleLine(line, ctx=new Context(), len=null) {
+      return AssembleLineWithoutContext(line, ctx, len);
+    }
+    static assembleCode(code) {
+      return AssembleCode(code);
+    }
+  }
 }
