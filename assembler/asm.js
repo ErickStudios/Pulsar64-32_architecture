@@ -566,6 +566,9 @@ export function AssembleLineWithoutContext(line, ctx, len=null) {
     else if (!ctx.in64 && peek7() === 'IRET') {
       consume(); result.push(0xC);
     }
+    else if (ctx.in64 && peek7() === 'IRET') {
+      consume(); result.push(0x1, 0xFF, 0xFF, 0x2);
+    }
     else if (ctx.in64 && peek7() === 'ADDINMB2') {
       consume(); 
       result.push(

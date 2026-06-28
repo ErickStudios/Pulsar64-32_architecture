@@ -1027,8 +1027,11 @@ always @(posedge clk) begin
                                 flags[3] = 1;
 
                                 if (!quiet) $display("CALC %0d NEW FLAGS %0d", i64a, flags);
-
                             end // calculate thing
+                            if (i64bytes[3] == 8'h02) begin
+                                irqRet64();
+                                if (!quiet) $display("IRET");
+                            end // interruption return
                         end // extend ins to pad
                     end // extend ins to pad
                     else if ((i64bytes[1] & 8'hF0) == 8'h10) begin

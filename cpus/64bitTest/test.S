@@ -5,7 +5,7 @@ vectors: Dword start        ; vector de arranque
 Mode32 EQU 00h ; modo de ejecucion
 Mode64 EQU 01h ; modo de ejecucion
 
-    Byte 0
+    Byte        0
 start:                      ; alinear a 3
     dbgAc64                 ; configurar el 64 (skip solo para debug)
     org64                   ; decirle al asm que esta en Pulsar64
@@ -51,7 +51,7 @@ start:                      ; alinear a 3
 TestEqual:
     add         r0, 1, 2    ; xd  
     
-    int         00h         ; lanzar int
+    int         01h         ; lanzar int
 
     Align       128 Byte 0
     Align       128
@@ -61,7 +61,7 @@ STACK_TOP:
 CPUTABLE:
     Qword       InterruptionsTable
     Qword       LevelsSettings
-    Qword       IndexOfMemPermsTable
+    Qword       MemoryRegionsTable
 
     Align       16
 InterruptionsTable:
@@ -69,21 +69,18 @@ InterruptionsTable:
     Dword       00h         ; indice de la paleta de nivel de privilegio
     Qword       isr1        ; manejador
 
+    Dword       Mode64      ; modo de ISA en el que operara
+    Dword       00h         ; indice de la paleta de nivel de privilegio
+    Qword       isr2        ; manejador
+
     Align       16
 LevelsSettings:
     Qword       00h, 0FFFFFFFFH ; IOM + PRIVS (kernel)
     Qword       01h, 0FFFFFFFFH ; IOM + PRIVS (user)
 
     Align       16
-
-IndexOfMemPermsTable:
-    Qword       FirmwareDescriptor ; lo que puede acceder el firmware
-    Qword       ProgramsDescriptor ; descriptor de programas
-
-FirmwareDescriptor:
+MemoryRegionsTable:
     Qword       00000000h, 0FFFFFFFFFFFFFFFFh ; inicio y fin de donde tiene permitido escribir
-
-ProgramsDescriptor:
     Qword       ProgramsSafeZone, EndProgramSafeZone ; final
 
 ProgramsSafeZone:
@@ -126,4 +123,24 @@ isr1:
     Push-Dword          10  ; probar
     Ror-Dword           Ax, Sp ; recuperar
     Iret                    ; instruccion especial para retornar el contexto
-    ;rstinm                  ; resetear el inm que se esta editando
+
+    org64
+    Align       4
+isr2:
+    sub         sp, sp, 8   ; restar
+    mwr64       sp, r0      ; poner en el stack
+
+    movi64
+    slcinm      02h         ; seleccionar el inm a editar
+    rstinm                  ; resetear el inm que se esta editando
+    ld64        xd2         ; valor a cargar
+
+    jmp         i(02h)
+    add         r0, r0, 7   ; ejemplo para saltar
+
+xd2:
+    ifm64       02h, sp     ; obtener del el puntero al stack
+    add         sp, sp, 8   ; añadir
+    linm        r0, 02h     ; obtener inmediato
+    
+    iret
