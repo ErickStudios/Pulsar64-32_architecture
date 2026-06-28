@@ -320,6 +320,10 @@ reg                 i64pend = 0;
 reg [3:0]           i64inmba = 0;
 reg [3:0]           i64bysiz = 0;
 reg [3:0]           i64opr = 0;
+reg                 i64runinbg = 0;
+
+reg [63:0]          i64proMemStart;
+reg [63:0]          i64proMemEnd;
 
 // ============== alu components ==============
 reg  [31:0]         aluA;
@@ -444,8 +448,12 @@ task general_reset; begin
         memory[2],
         memory[3]
     };
+    i64runinbg <= 0;
+    i64perms = 64'hFFFFFFFFFFFFFFFF;
     in64Bit <= 0;
     sp = 95000;
+    xsp = 0;
+
     ir = 0;
     paused = 0;
 end endtask
@@ -461,17 +469,22 @@ task write_mem_byte;
 input [31:0]    addr;
 input [7:0]     val;
 begin
-    if (addr > 63999) begin
-        CWFDD = 1;
-        dev_wrt_en   = 1;
-        dev_wrt_addr = addr - 64000;
-        dev_wrt_val  = val;
+    if (i64runinbg ? !checIfMemkBoundles64Exepction(addr, 0) : 1) begin
+        if (addr > 63999) begin
+            CWFDD = 1;
+            dev_wrt_en   = 1;
+            dev_wrt_addr = addr - 64000;
+            dev_wrt_val  = val;
+        end
+        CWFDM = 2;
+        mem_wrt_ene   = 1;
+        mem_wrt_addre = addr;
+        mem_wrt_vale  = val;
+        memory[addr] = val;
     end
-    CWFDM = 2;
-    mem_wrt_ene   = 1;
-    mem_wrt_addre = addr;
-    mem_wrt_vale  = val;
-    memory[addr] = val;
+    else begin
+        irqJmp64(32'h00000000); // segmentation fault
+    end
 end endtask
 task ex_lpx; begin
     mode = memory[pc];
@@ -783,7 +796,7 @@ localparam CpuLvlSetsIInTbl = 1;
 localparam CpuIOMIInTbl     = 2;
 
 localparam IdtDescPartSize  = 16;
-localparam LevelPrivSize    = 8;
+localparam LevelPrivSize    = 16;
 
 localparam IdtDescIsaOffset = 0;
 localparam IdtDescPrivOffset= 4;
@@ -793,6 +806,10 @@ localparam LvlDescSizeField = 8;
 localparam LvlDescNField    = 2;
 localparam LvlDescPermsOff  = LvlDescSizeField * 1;
 localparam LvlDescSize      = LvlDescSizeField * LvlDescNField;
+
+localparam MemMapDescSize   = 8;
+localparam MemMapDescEndOff = MemMapDescSize * 1;
+localparam MemMapDescEntry  = MemMapDescSize * 2;
 
 reg  [63:0] i64irqsft     = 64'hFFFFFFFFFFFFFFFF;
 reg  [63:0] i64perms      = 64'hFFFFFFFFFFFFFFFF;
@@ -814,6 +831,12 @@ reg  [63:0] xpc           = 0;
 `define i64ispriv       readInm64Max(4, `i64isrdptr + IdtDescPrivOffset)
 `define i64isfunc       readInm64Max(8, `i64isrdptr + IdtDescFuncOffset)
 `define i64isprivInd    `i64levelTable + (`i64ispriv * LevelPrivSize)
+
+`define i64iprivmem     readInm64Max(LvlDescSizeField,`i64isprivInd)
+`define i64privmema     `i64permTable + (`i64iprivmem * MemMapDescEntry)
+
+`define i64privmemstart readInm64Max(MemMapDescSize, `i64privmema)
+`define i64privmemend   readInm64Max(MemMapDescSize, `i64privmema + MemMapDescEndOff)
 
 function [63:0] CpuTableEntry;
 input [31:0] index;
@@ -859,6 +882,8 @@ begin
     saveThingInStack64(i64a);
     saveDir64();
     i64irqsft = irqId;
+    i64proMemStart = `i64privmemstart;
+    i64proMemEnd   = `i64privmemend;
     i64perms =  readInm64Max(LvlDescSizeField,`i64isprivInd + LvlDescPermsOff);
     xpc      = `i64isfunc;
     pc       = xpc[31:0];
@@ -866,6 +891,64 @@ begin
     in64Bit  = i64temp[0];
 end
 endtask
+
+function checIfMemkBoundles64Exepction;
+input [63:0] addr;
+input        action; // 0: write, 1:read
+begin
+
+    // Bit 0 de perms: se puede escribir en lo permitido
+    // Bit 1 de perms: se puede leer en lo permitido
+    // Bit 2 de perms: se puede escribir en lo no permitido
+    // Bit 3 de perms: se puede leer en lo no permitido
+
+    checIfMemkBoundles64Exepction = 0;
+
+    // verificar si es valida la region de memoria
+    if (i64proMemStart > i64proMemEnd) 
+        checIfMemkBoundles64Exepction = 1;
+    else if (i64proMemEnd < i64proMemStart) 
+        checIfMemkBoundles64Exepction = 1;
+
+    // si se hizo la operacion dentro de la descripcion
+    else if (addr >= i64proMemStart && addr <= i64proMemEnd) begin
+        if (action == 0 && !i64perms[0]) 
+            checIfMemkBoundles64Exepction = 1; // no tiene el permiso de escribir en lo permitido
+        if (action == 1 && !i64perms[1]) 
+            checIfMemkBoundles64Exepction = 1; // no tiene el permiso de leer en lo permitido
+    end
+
+    // los permisos de lo no permitido
+    else begin
+        if (action == 0 && !i64perms[2]) 
+            checIfMemkBoundles64Exepction = 1; // no tiene el permiso de escribir en lo permitido
+        if (action == 1 && !i64perms[3]) 
+            checIfMemkBoundles64Exepction = 1; // no tiene el permiso de leer en lo permitido
+    end
+end
+endfunction
+
+task WriteMem64; 
+input [63:0]    addr;
+input [7:0]     val;
+begin
+    if (!checIfMemkBoundles64Exepction(addr, 0)) begin
+        if (addr > 63999) begin
+            CWFDD = 1;
+            dev_wrt_en   = 1;
+            dev_wrt_addr = (addr[31:0]) - 64000;
+            dev_wrt_val  = val;
+        end
+        CWFDM = 2;
+        mem_wrt_ene   = 1;
+        mem_wrt_addre = addr[31:0];
+        mem_wrt_vale  = val;
+        memory[addr] = val;
+    end
+    else begin
+        irqJmp64(32'h00000000); // segmentation fault
+    end
+end endtask
 
 task irqRet64;
 begin
@@ -887,7 +970,7 @@ begin
     if (!quiet) $display("HRD I64 %0d %0d", irq_addr, irq_data);
     paused = 0;
     irq_ack <= 1; 
-    irqJmp64(irq_addr);
+    irqJmp64(irq_addr + 32'h0F);
 end 
 endtask
 
@@ -1077,7 +1160,7 @@ always @(posedge clk) begin
                         endcase
                         if (!quiet) $display("MEM WRT AT %0d STEPS %0d DATA %0d", i64memre ,i64bysiz, i64temp);
                         for (i = 0; i < i64bysiz; i = i + 1) begin
-                            write_mem_byte(i64memre + i, (i64temp >> (8 * (i64bysiz - 1 - i))) & 8'hFF);
+                            WriteMem64(i64memre + i, (i64temp >> (8 * (i64bysiz - 1 - i))) & 8'hFF);
                         end
                     end // mem write
                 end // mem 
@@ -1114,6 +1197,7 @@ always @(posedge clk) begin
                     $display("NULL0      CH64");
                     xpc = pc;
                     in64Bit <= 1; 
+                    i64runinbg <= 1;
                 end
                 // IRET
                 8'h0C: begin

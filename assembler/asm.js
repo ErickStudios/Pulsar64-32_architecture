@@ -482,6 +482,13 @@ export function AssembleLineWithoutContext(line, ctx, len=null) {
   function parseCalc() {
     
   }
+  function loadInmediate64bits(sizeof) {
+    consume();
+    let register = consume().value;
+    expect(',');
+    let valu = parseIdent(parsePrimary().value);
+    result.push(...AssembleLineWithoutContext(`slcinm 0Fh rstinm ld${(sizeof * 8).toString()} ${valu.toString()} linm ${register}, 0Fh`, ctx, len));
+  }
   while (i < tokens.length) {
     if (!ctx.in64 && peek7() === 'PUSH') {
       consume();
@@ -557,6 +564,10 @@ export function AssembleLineWithoutContext(line, ctx, len=null) {
         1, 0xFF, 0x02, parse64bitReg(), 
       );
     }
+    
+    else if (ctx.in64 && peek7() === 'LI16') loadInmediate64bits(2);
+    else if (ctx.in64 && peek7() === 'LI32') loadInmediate64bits(4);
+    else if (ctx.in64 && peek7() === 'LI64') loadInmediate64bits(8);
 
     else if (ctx.in64 && peek7() === 'JIFEQ') parseJmpIfFlag64(0);
     else if (ctx.in64 && peek7() === 'JINEG') parseJmpIfFlag64(1);
