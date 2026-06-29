@@ -284,7 +284,7 @@ module cpu(
 );
 
 // ============== cpu variables ==============}
-reg  [7:0]          memory [0:960000]; // 64K normal mem, 32K for MMIO
+reg  [7:0]          memory [0:1999999]; // 64K normal mem, 32K for MMIO unknown for free the other of 2 MB
 reg  [31:0]         pc;
 reg  [31:0]         sp;
 reg  [31:0]         currentPtrAddrs;

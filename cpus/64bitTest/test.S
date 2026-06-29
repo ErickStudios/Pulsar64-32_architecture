@@ -139,19 +139,20 @@ isr2:
     sub         sp, sp, 8   ; restar
     mwr64       sp, r0      ; poner en el stack
 
-    li64        r0, xd2     ; obtener direccion
-
-    jmp         r0
-    add         r0, r0, 7   ; ejemplo para saltar
-
-xd2:
     ifm64       02h, sp     ; obtener del el puntero al stack
     add         sp, sp, 8   ; añadir
     linm        r0, 02h     ; obtener inmediato
     
     iret
 
+; ================ EXCEPCIONES ================
     org64
 segfault:
-    li64        r0, segfault; obtener direccion del label
+    li64        r0, hang    ; obtener direccion del panic
+    jmp         r0          ; saltar
+    
+; ================ HANDLE PARA EXCEPCIONES Y MAS ================
+    org64
+hang:
+    li64        r0, hang    ; obtener direccion del label
     jmp         r0          ; saltar
