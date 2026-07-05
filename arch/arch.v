@@ -1,27 +1,42 @@
 module cpu(
-    input           clk,
-    input           reset,
-    input           irq,
-    input [31:0]    irq_addr,
-    input [7:0]     irq_data,
-    output reg      irq_ack,
-
-    input [7:0]     mem_wrt_val,
-    input [31:0]    mem_wrt_addr,
-    input           mem_wrt_bool,
-
-    output reg [7:0] mem_rdr_val,
-    input [31:0]    mem_rdr_addr,
-    input           mem_rdr_bool,
-
-    output reg      dev_wrt_en,
-    output reg [31:0] dev_wrt_addr,
-    output reg [7:0]  dev_wrt_val,
-
-    output reg      mem_wrt_ene,
-    output reg [31:0] mem_wrt_addre,
-    output reg [7:0]  mem_wrt_vale
+    // relog
+    input               clk,
+    input               reset,
+    // interrupciones
+    input               irq,
+    input [31:0]        irq_addr,
+    input [7:0]         irq_data,
+    output reg          irq_ack,
+    // Memoria del cpu al escribir desde fuera
+    input [7:0]         mem_wrt_val,
+    input [31:0]        mem_wrt_addr,
+    input               mem_wrt_bool,
+    // Memoria del cpu al leer desde fuera
+    output reg [7:0]    mem_rdr_val,
+    input [31:0]        mem_rdr_addr,
+    input               mem_rdr_bool,
+    // Cuando se escribio en un dispositivo
+    output reg          dev_wrt_en,
+    output reg [31:0]   dev_wrt_addr,
+    output reg [7:0]    dev_wrt_val,
+    // Cuando se escribio en una direccion
+    output reg          mem_wrt_ene,
+    output reg [31:0]   mem_wrt_addre,
+    output reg [7:0]    mem_wrt_vale,
+    // Cuando ya leyo/escribio desde fuera
+    output reg          mem_wrt_ack,
+    output reg          mem_rdr_ack
 );
+
+// Bandera que la escritura se completo se desactiva
+always @(negedge mem_wrt_bool) begin
+    mem_wrt_ack <= 0;
+end
+
+// Bandera que la lectura se completo se desactiva
+always @(negedge mem_rdr_bool) begin
+    mem_rdr_ack <= 0;
+end
 
 // ============== cpu variables ==============}
 reg  [7:0]          memory [0:1999999]; // 64K normal mem, 32K for MMIO unknown for free the other of 2 MB
@@ -54,7 +69,7 @@ reg [1:0]           CWFDM;
 reg                 in64Bit;
 reg [63:0]          inms64 [0:15];
 reg [7:0]           selectedinm64;
-reg [63:0]          i64CpuTbl, i64a, i64b, i64memre, i64temp, xsp, x0, x1, x2, x3, x4, x5, x6, x7;
+reg [63:0]          i64CpuTbl, i64a, i64b, i64memre, i64temp, xsp, i64lnk, x0, x1, x2, x3, x4, x5, x6, x7;
 reg [7:0]           i64bytes [0:3];
 reg                 i64pend = 0;
 reg [3:0]           i64inmba = 0;
@@ -481,6 +496,7 @@ begin
     7: regVal = x4;
     8: regVal = x5;
     9: regVal = x6;
+    10:regVal = i64lnk;
     endcase
 end endtask
 
@@ -497,6 +513,7 @@ begin
     7: x4   = regVal;
     8: x5   = regVal;
     9: x6   = regVal;
+    10:i64lnk=regVal;
     endcase
 end
 endtask
@@ -757,11 +774,15 @@ endtask
 // | #LOOP #NONDEBUG #DEBUG                       |
 // ------------------------------------------------
 always @(posedge clk) begin
-    if (mem_wrt_bool) 
+    if (mem_wrt_bool) begin
         memory[mem_wrt_addr] <= mem_wrt_val;
+        mem_wrt_ack <= 1;
+    end
 
-    if (mem_rdr_bool) 
+    if (mem_rdr_bool) begin
         mem_rdr_val <= memory[mem_rdr_addr]; 
+        mem_rdr_ack <= 1;
+    end
     if (CWFDD == 1) begin
         dev_wrt_en <= 0;
         CWFDD = CWFDD - 1;
@@ -788,10 +809,12 @@ always @(posedge clk) begin
         
         if (mem_wrt_bool) begin
             memory[mem_wrt_addr] <= mem_wrt_val;
+            mem_wrt_ack <= 1;
         end
 
         if (mem_rdr_bool) begin 
             mem_rdr_val <= memory[mem_rdr_addr]; 
+            mem_rdr_ack <= 1;
         end
 
         // check alu
@@ -862,9 +885,14 @@ always @(posedge clk) begin
                             endcase
                             if (!quiet) $display("JMP TO %0d IF FLAG %0d", i64temp, i64bytes[2][3:0]);
 
+                            if (i64bytes[2][3:0] == 4) begin
+                                i64lnk = xpc;
+                                i64a =   1;
+                            end
+
                             if (i64a) begin 
-                                xpc = i64temp;
-                                pc <= xpc[31:0];
+                                xpc =    i64temp;
+                                pc <=    xpc[31:0];
                              end
                         end // jmp if a condition is true
                         else if (i64bytes[2] == 8'h03) begin
@@ -887,10 +915,15 @@ always @(posedge clk) begin
 
                                 if (!quiet) $display("CALC %0d NEW FLAGS %0d", i64a, flags);
                             end // calculate thing
-                            if (i64bytes[3] == 8'h02) begin
+                            else if (i64bytes[3] == 8'h02) begin
                                 irqRet64();
                                 if (!quiet) $display("IRET");
                             end // interruption return
+                            else if (i64bytes[3] == 8'h03) begin
+                                irqRet64();
+                                if (!quiet) $display("HLT");
+                                paused <= 1;
+                            end
                         end // extend ins to pad
                     end // extend ins to pad
                     else if ((i64bytes[1] & 8'hF0) == 8'h10) begin

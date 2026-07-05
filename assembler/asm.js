@@ -376,7 +376,8 @@ export function AssembleLineWithoutContext(line, ctx, len=null) {
     if (f3 === 'R3') return 6;
     if (f3 === 'R4') return 7;
     if (f3 === 'R5') return 8;
-    if (f3 === 'R6') return 8;
+    if (f3 === 'R6') return 9;
+    if (f3 === 'LNK')return 10;
     return 0;
   }
   function parse64bitExpr() {
@@ -446,7 +447,6 @@ export function AssembleLineWithoutContext(line, ctx, len=null) {
     let nib = (expr1n[0] << 2) | expr2n[0];
     let coda = (rega << 4) | nib;
     result.push(coda, expr1n[1], expr2n[1]);
-    console.log(coda);
   }
   function parseMemWrite(sizeof) {
     // [OP] MA ST [DT] 
@@ -543,20 +543,31 @@ export function AssembleLineWithoutContext(line, ctx, len=null) {
       consume(); 
       result.push(1, 0xFF, 0xFF, 0x20 | parse64bitReg());
     }
-    else if (ctx.in64 && peek7() === 'MWR8') parseMemWrite(1);
+    else if (ctx.in64 && peek7() === 'MWR8')  parseMemWrite(1);
     else if (ctx.in64 && peek7() === 'MWR16') parseMemWrite(2);
     else if (ctx.in64 && peek7() === 'MWR32') parseMemWrite(4);
     else if (ctx.in64 && peek7() === 'MWR64') parseMemWrite(8);
     
-    else if (ctx.in64 && peek7() === 'IFM8') parseInmFromMem(1);
+    else if (ctx.in64 && peek7() === 'IFM8')  parseInmFromMem(1);
     else if (ctx.in64 && peek7() === 'IFM16') parseInmFromMem(2);
     else if (ctx.in64 && peek7() === 'IFM32') parseInmFromMem(4);
     else if (ctx.in64 && peek7() === 'IFM64') parseInmFromMem(8);
 
-    else if (ctx.in64 && peek7() === 'ADD') parse64bitOperation(0);
-    else if (ctx.in64 && peek7() === 'SUB') parse64bitOperation(1);
-    else if (ctx.in64 && peek7() === 'MUL') parse64bitOperation(2);
-    else if (ctx.in64 && peek7() === 'DIV') parse64bitOperation(3);
+    else if (ctx.in64 && peek7() === 'ADD')   parse64bitOperation(0);
+    else if (ctx.in64 && peek7() === 'SUB')   parse64bitOperation(1);
+    else if (ctx.in64 && peek7() === 'MUL')   parse64bitOperation(2);
+    else if (ctx.in64 && peek7() === 'DIV')   parse64bitOperation(3);
+    
+    else if (ctx.in64 && peek7() === 'LI16')  loadInmediate64bits(2);
+    else if (ctx.in64 && peek7() === 'LI32')  loadInmediate64bits(4);
+    else if (ctx.in64 && peek7() === 'LI64')  loadInmediate64bits(8);
+
+    else if (ctx.in64 && peek7() === 'JIFEQ') parseJmpIfFlag64(0);
+    else if (ctx.in64 && peek7() === 'JINEG') parseJmpIfFlag64(1);
+    else if (ctx.in64 && peek7() === 'JIPOS') parseJmpIfFlag64(2);
+    else if (ctx.in64 && peek7() === 'JITRUE')parseJmpIfFlag64(3);
+    else if (ctx.in64 && peek7() === 'JMP')   parseJmpIfFlag64(3);
+    else if (ctx.in64 && peek7() === 'BL')    parseJmpIfFlag64(4);
 
     else if (ctx.in64 && peek7() === 'LTBL') {
       consume(); 
@@ -564,21 +575,15 @@ export function AssembleLineWithoutContext(line, ctx, len=null) {
         1, 0xFF, 0x02, parse64bitReg(), 
       );
     }
-    
-    else if (ctx.in64 && peek7() === 'LI16') loadInmediate64bits(2);
-    else if (ctx.in64 && peek7() === 'LI32') loadInmediate64bits(4);
-    else if (ctx.in64 && peek7() === 'LI64') loadInmediate64bits(8);
 
-    else if (ctx.in64 && peek7() === 'JIFEQ') parseJmpIfFlag64(0);
-    else if (ctx.in64 && peek7() === 'JINEG') parseJmpIfFlag64(1);
-    else if (ctx.in64 && peek7() === 'JIPOS') parseJmpIfFlag64(2);
-    else if (ctx.in64 && peek7() === 'JITRUE') parseJmpIfFlag64(3);
-    else if (ctx.in64 && peek7() === 'JMP') parseJmpIfFlag64(3);
     else if (!ctx.in64 && peek7() === 'IRET') {
       consume(); result.push(0xC);
     }
     else if (ctx.in64 && peek7() === 'IRET') {
       consume(); result.push(0x1, 0xFF, 0xFF, 0x2);
+    }
+    else if (ctx.in64 && peek7() === 'HLT') {
+      consume(); result.push(0x1, 0xFF, 0xFF, 0x3);
     }
     else if (ctx.in64 && peek7() === 'ADDINMB2') {
       consume(); 
