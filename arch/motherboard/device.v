@@ -21,10 +21,10 @@ reg                     active;
 
 always @(posedge clk) begin
     if (reset) begin
-        irq = 0;
-        active = 0;
-        irq_addr = 0;
-        irq_data = 0;
+        irq <= 0;
+        active <= 0;
+        irq_addr <= 0;
+        irq_data <= 0;
         device_buffer <= 0;
     end else begin
         if (wrt_en && (wrt_addr == BASE_ADDR)) begin
@@ -32,16 +32,16 @@ always @(posedge clk) begin
         end
         
         if (enable)
-            active = 1;
+            active <= 1;
         if (active && !irq) begin
-            irq = 1;
-            irq_addr = BASE_ADDR;
-            irq_data = data_in;
+            irq <= 1;
+            irq_addr <= BASE_ADDR;
+            irq_data <= data_in;
         end
 
         if (irq && irq_ack) begin
-            irq = 0;
-            active = 0;
+            irq <= 0;
+            active <= 0;
         end
     end
 end

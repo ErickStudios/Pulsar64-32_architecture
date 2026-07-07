@@ -380,6 +380,17 @@ export function AssembleLineWithoutContext(line, ctx, len=null) {
     if (f3 === 'LNK')return 10;
     return 0;
   }
+  function parseSegmentRegister() {
+    let f3 = fmt7(consume().value);
+    if (f3 === 'AS') return 0;
+    if (f3 === 'BS') return 1;
+    if (f3 === 'CS') return 2;
+    if (f3 === 'DS') return 3;
+    if (f3 === 'ES') return 4;
+    if (f3 === 'FS') return 5;
+    if (f3 === 'GS') return 6;
+    return 0;
+  }
   function parse64bitExpr() {
     if (typeof peek().value === 'number') {
       return { t:'n', n:consume().value };
@@ -521,6 +532,14 @@ export function AssembleLineWithoutContext(line, ctx, len=null) {
     else if (ctx.in64 && peek7() === 'SLCINM') {
       consume(); 
       result.push(1, 0xFF, 1, parseIdent(parsePrimary().value));
+    }
+    else if (ctx.in64 && peek7() === 'SRW') {
+      consume(); 
+      result.push(1, 0x5, [parseSegmentRegister(), expect(',')][0], parse64bitReg());
+    }
+    else if (ctx.in64 && peek7() === 'SRR') {
+      consume(); 
+      result.push(1, 0x50 | [parseSegmentRegister(), expect(':')][0], [parse64bitReg(), expect(',')][0], parse64bitReg());
     }
     else if (ctx.in64 && peek7() === 'LD64') {
       parseLoadAddr(8);

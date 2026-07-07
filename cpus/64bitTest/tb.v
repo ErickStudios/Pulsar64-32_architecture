@@ -96,11 +96,13 @@ end
 initial begin
     // Load Fd Image
     $display    ("pulsar5024XM_x32 chip debug");
-    $readmemh   ("program.hex", FirmwareROM);
+    $readmemh   ("program.hex", uut.memory);
 
     // Initialize For First Time
-    #10         HardReset = 1;
-    #1          HardReset = 0;
+    #10         SoftReset = 1;
+    #1          SoftReset = 0;
+
+    
 
     // Finish Simulation
     #1000000    $finish;

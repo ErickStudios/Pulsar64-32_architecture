@@ -10,6 +10,9 @@ start:
     dbgAc64                 ; configurar el 64 (skip solo para debug)
     org64                   ; decirle al asm que esta en Pulsar64
 
+    li64        r0, TABLEC  ; cargar tope del stack
+    srw         fs, r0      ; 01 05 05 03 (SR (R))
+
     add         r0, 0, 0    ; limpiar r0
     calc        r0          ; limpiar flags
 
@@ -51,7 +54,9 @@ InterruptionsTable:
     Dword       Mode64, 00h ; permisos de la excepcion de violacion de segmento
     Qword       segfault    ; puntero alli
 
-    Qword       0,0
+    Dword       Mode64, 00h ; permisos de la excepcion de violacion de registro de segmento
+    Qword       hang        ; puntero alli
+
     Qword       0,0
     Qword       0,0
     Qword       0,0
@@ -79,14 +84,10 @@ InterruptionsTable:
     Dword       01h         ; indice de la paleta de nivel de privilegio
     Qword       user_load   ; manejador
 
-    Dword       Mode64      
-    Dword       00h
-    Qword       putmsg
-
     Align       16
 LevelsSettings:
     Qword       00h, 0FFFFFFFFH ; IOM + PRIVS (kernel)
-    Qword       01h, 0FFFFFFF3H ; IOM + PRIVS (user)
+    Qword       01h, 0FFFF8203H ; IOM + PRIVS (user)
 
     Align       16
 MemoryRegionsTable:
@@ -121,11 +122,12 @@ segfault:
     
 ProgramsSafeZone:
 user_load:
-    li64 sp, KernelStackTop
-    li64 r0, adaa
-    li64 r6, putmsg
-    bl   r6
-    hlt
+    srr         as:r0, r1
+    li64        sp, KernelStackTop ; iniciar el stack del usuario
+    li64        r0, adaa    ; puntero al mensaje
+    li64        r6, putmsg  ; funcion para poner mensaje
+    bl          r6          ; lanzar funcion y guardar el retorno en lnk
+    hlt                     ; programa terminado
 adaa:
     Byte 'a','b','c',0
     Align 512 Byte  0
@@ -186,7 +188,6 @@ putmsg:
     mwr64       sp, r2      ; poner en el stack
     sub         sp, sp, 8   ; restar
     mwr64       sp, r3      ; poner en el stack
-
 putmsgl:
     ifm8        02h, r0      ; obtener caracter
     linm        r1, 02h     ; obtener
@@ -199,7 +200,6 @@ putmsgl:
     add         r0, r0, 1   ; seguir puntero
     li64        r3, putmsgl; direccion de fin
     jmp         r3
-
 putmsg_end:
     ifm64       02h, sp     ; obtener del el puntero al stack
     add         sp, sp, 8   ; añadir

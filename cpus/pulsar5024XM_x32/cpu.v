@@ -21,10 +21,10 @@ reg                     active;
 
 always @(posedge clk) begin
     if (reset) begin
-        irq = 0;
-        active = 0;
-        irq_addr = 0;
-        irq_data = 0;
+        irq <= 0;
+        active <= 0;
+        irq_addr <= 0;
+        irq_data <= 0;
         device_buffer <= 0;
     end else begin
         if (wrt_en && (wrt_addr == BASE_ADDR)) begin
@@ -32,16 +32,16 @@ always @(posedge clk) begin
         end
         
         if (enable)
-            active = 1;
+            active <= 1;
         if (active && !irq) begin
-            irq = 1;
-            irq_addr = BASE_ADDR;
-            irq_data = data_in;
+            irq <= 1;
+            irq_addr <= BASE_ADDR;
+            irq_data <= data_in;
         end
 
         if (irq && irq_ack) begin
-            irq = 0;
-            active = 0;
+            irq <= 0;
+            active <= 0;
         end
     end
 end
@@ -259,54 +259,93 @@ end
 
 endmodule
 module cpu(
-    input           clk,
-    input           reset,
-    input           irq,
-    input [31:0]    irq_addr,
-    input [7:0]     irq_data,
-    output reg      irq_ack,
-
-    input [7:0]     mem_wrt_val,
-    input [31:0]    mem_wrt_addr,
-    input           mem_wrt_bool,
-
-    output reg [7:0] mem_rdr_val,
-    input [31:0]    mem_rdr_addr,
-    input           mem_rdr_bool,
-
-    output reg      dev_wrt_en,
-    output reg [31:0] dev_wrt_addr,
-    output reg [7:0]  dev_wrt_val,
-
-    output reg      mem_wrt_ene,
-    output reg [31:0] mem_wrt_addre,
-    output reg [7:0]  mem_wrt_vale
+    // relog
+    input               clk,
+    input               reset,
+    // interrupciones
+    input               irq,
+    input [31:0]        irq_addr,
+    input [7:0]         irq_data,
+    output reg          irq_ack,
+    // Memoria del cpu al escribir desde fuera
+    input [7:0]         mem_wrt_val,
+    input [31:0]        mem_wrt_addr,
+    input               mem_wrt_bool,
+    // Memoria del cpu al leer desde fuera
+    output reg [7:0]    mem_rdr_val,
+    input [31:0]        mem_rdr_addr,
+    input               mem_rdr_bool,
+    // Cuando se escribio en un dispositivo
+    output reg          dev_wrt_en,
+    output reg [31:0]   dev_wrt_addr,
+    output reg [7:0]    dev_wrt_val,
+    // Cuando se escribio en una direccion
+    output reg          mem_wrt_ene,
+    output reg [31:0]   mem_wrt_addre,
+    output reg [7:0]    mem_wrt_vale,
+    // Cuando ya leyo/escribio desde fuera
+    output reg          mem_wrt_ack,
+    output reg          mem_rdr_ack
 );
 
+// Bandera que la escritura se completo se desactiva
+always @(negedge mem_wrt_bool) begin
+    mem_wrt_ack <= 0;
+end
+
+// Bandera que la lectura se completo se desactiva
+always @(negedge mem_rdr_bool) begin
+    mem_rdr_ack <= 0;
+end
+
 // ============== cpu variables ==============}
-reg  [7:0]          memory [0:960000]; // 64K normal mem, 32K for MMIO
+reg  [7:0]          memory [0:1999999]; // 64K normal mem, 32K for MMIO unknown for free the other of 2 MB
 reg  [31:0]         pc;
 reg  [31:0]         sp;
 reg  [31:0]         currentPtrAddrs;
+
+// ============== Cpu32 unused variables ==============
 wire [7:0]          PXB1 = currentPtrAddrs  [31:24];
 wire [7:0]          PXB2 = currentPtrAddrs  [23:16];
 wire [7:0]          PXB3 = currentPtrAddrs  [15:8];
 wire [7:0]          PXB4 = currentPtrAddrs  [7:0];
-reg  [7:0]          OprOperator;
-reg  [7:0]          OprOperationBytes;
-reg  [7:0]          valueRegister;
+
+// ============== Registers ==============
 reg  [7:0]          op_id;
-reg  [31:0]         a, b, tempReg, result, r0, r1, r2, r3, r4, r5, r6, r7, r8;
+reg  [31:0]         a,
+                    b, 
+                    tempReg, 
+                    result, 
+                    r0, 
+                    r1, 
+                    r2, 
+                    r3, 
+                    r4, 
+                    r5, 
+                    r6, 
+                    r7, 
+                    r8;
+
+// ============== Cpu temp variables ==============
 reg  [7:0]          ir;
 reg  [7:0]          opcode;
 reg  [7:0]          mode;
 reg  [7:0]          operationModes;
 reg  [7:0]          flags;
+reg  [7:0]          OprOperator;
+reg  [7:0]          OprOperationBytes;
+reg  [7:0]          valueRegister;
+
+// ============== Irq temp variables ==============
 reg [31:0]          vector_base;
 reg [31:0]          offset;
 reg [31:0]          irq_vector;
+
+// ============== Cpu Dbg and running ==============
 reg                 quiet = 0;
 reg                 paused;
+
+// ============== States Writes ==============
 reg [1:0]           CWFDD;
 reg [1:0]           CWFDM;
 
@@ -314,12 +353,31 @@ reg [1:0]           CWFDM;
 reg                 in64Bit;
 reg [63:0]          inms64 [0:15];
 reg [7:0]           selectedinm64;
-reg [63:0]          i64CpuTbl, i64a, i64b, i64memre, i64temp, xsp, x0, x1, x2, x3, x4, x5, x6, x7;
+reg [63:0]          i64CpuTbl, 
+                    i64a, 
+                    i64b, 
+                    i64memre, 
+                    i64temp, 
+                    xsp, 
+                    i64lnk, 
+                    x0, 
+                    x1, 
+                    x2, 
+                    x3, 
+                    x4, 
+                    x5, 
+                    x6, 
+                    x7;
 reg [7:0]           i64bytes [0:3];
 reg                 i64pend = 0;
 reg [3:0]           i64inmba = 0;
 reg [3:0]           i64bysiz = 0;
 reg [3:0]           i64opr = 0;
+reg                 i64runinbg = 0;
+reg [31:0]          i32nextPc = 0;
+
+reg [63:0]          i64proMemStart;
+reg [63:0]          i64proMemEnd;
 
 // ============== alu components ==============
 reg  [31:0]         aluA;
@@ -388,12 +446,12 @@ output [31:0] val;
 begin
     case (modeOpr)
         4'h0: begin
-            val = readINM(bytesLen, pc);
-            pc = pc + bytesLen;
+            val = readINM(bytesLen, i32nextPc);
+            i32nextPc = i32nextPc + bytesLen;
         end
         4'h1: begin
-            tempReg = memory[pc];
-            pc = pc + 1;
+            tempReg = memory[i32nextPc];
+            i32nextPc = i32nextPc + 1;
 
             // register
             case (tempReg)
@@ -438,45 +496,54 @@ task alu_reset; begin
 end endtask
 
 task general_reset; begin
-    pc <= {
+    i32nextPc = {
         memory[0],
         memory[1],
         memory[2],
         memory[3]
     };
-    in64Bit <= 0;
+    i64runinbg = 0;
+    i64perms = 64'hFFFFFFFFFFFFFFFF;
+    in64Bit = 0;
     sp = 95000;
+    xsp = 0;
+
     ir = 0;
     paused = 0;
 end endtask
 task save_dir; begin
     sp = sp - 4;
-    memory[sp]     = pc[31:24];
-    memory[sp + 1] = pc[23:16];
-    memory[sp + 2] = pc[15:8];
-    memory[sp + 3] = pc[7:0];
+    memory[sp]     = i32nextPc[31:24];
+    memory[sp + 1] = i32nextPc[23:16];
+    memory[sp + 2] = i32nextPc[15:8];
+    memory[sp + 3] = i32nextPc[7:0];
 end endtask
 
 task write_mem_byte; 
 input [31:0]    addr;
 input [7:0]     val;
 begin
-    if (addr > 63999) begin
-        CWFDD = 1;
-        dev_wrt_en   = 1;
-        dev_wrt_addr = addr - 64000;
-        dev_wrt_val  = val;
+    if (i64runinbg ? !checIfMemkBoundles64Exepction(addr, 0) : 1) begin
+        if (addr > 63999) begin
+            CWFDD = 1;
+            dev_wrt_en   = 1;
+            dev_wrt_addr = addr - 64000;
+            dev_wrt_val  = val;
+        end
+        CWFDM = 2;
+        mem_wrt_ene   = 1;
+        mem_wrt_addre = addr;
+        mem_wrt_vale  = val;
+        memory[addr] = val;
     end
-    CWFDM = 2;
-    mem_wrt_ene   = 1;
-    mem_wrt_addre = addr;
-    mem_wrt_vale  = val;
-    memory[addr] = val;
+    else begin
+        irqJmp64(32'h00000000); // segmentation fault
+    end
 end endtask
 task ex_lpx; begin
-    mode = memory[pc];
-    OprOperationBytes = memory[pc + 1];
-    pc = pc + 2;
+    mode = memory[i32nextPc];
+    OprOperationBytes = memory[i32nextPc + 1];
+    i32nextPc = i32nextPc + 2;
 
     if (!quiet) $write("ANONYMUS");
     if ((OprOperationBytes * 8) < 10) begin
@@ -491,14 +558,15 @@ task ex_lpx; begin
 
     currentPtrAddrs = a;
 end endtask
+
 task ex_ldx; begin
     if (!quiet) $display("REGISTER8  LDX");
     valueRegister = memory[currentPtrAddrs];
 end endtask
 task ex_pus; begin
-    mode = memory[pc];
-    OprOperationBytes = memory[pc + 1];
-    pc = pc + 2;
+    mode = memory[i32nextPc];
+    OprOperationBytes = memory[i32nextPc + 1];
+    i32nextPc = i32nextPc + 2;
 
     operateInstant(mode[3:0],OprOperationBytes,a);
 
@@ -514,10 +582,10 @@ task ex_pus; begin
 end endtask
 task ex_opr; begin
     // fetch mode
-    OprOperator = memory[pc];           // operator
-    OprOperationBytes = memory[pc + 1]; // operation bytes len
-    operationModes = memory[pc + 2];    // operation mode
-    pc = pc + 3;                        // increment pc
+    OprOperator = memory[i32nextPc];           // operator
+    OprOperationBytes = memory[i32nextPc + 1]; // operation bytes len
+    operationModes = memory[i32nextPc + 2];    // operation mode
+    i32nextPc = i32nextPc + 3;                        // increment pc
 
     if (!quiet) $write("ANONYMUS");
     if ((OprOperationBytes * 8) < 10) begin
@@ -550,9 +618,9 @@ task ex_opr; begin
 end endtask
 task ex_cmp; begin
     // fetch mode
-    OprOperationBytes = memory[pc]; // operation bytes len
-    operationModes = memory[pc + 1];    // operation mode
-    pc = pc + 2;                        // increment pc
+    OprOperationBytes = memory[i32nextPc]; // operation bytes len
+    operationModes = memory[i32nextPc + 1];    // operation mode
+    i32nextPc = i32nextPc + 2;                        // increment pc
 
     if (!quiet) $write("ANONYMUS");
     if ((OprOperationBytes * 8) < 10) begin
@@ -577,10 +645,10 @@ task ex_cmp; begin
 end endtask
 task ex_jmp; begin
     // fetch mode
-    OprOperationBytes = memory[pc];     // operation bytes len
-    operationModes = memory[pc + 1];    // operation mode
-    mode = memory[pc + 2];              // jmp template
-    pc = pc + 3;                        // increment pc
+    OprOperationBytes = memory[i32nextPc];     // operation bytes len
+    operationModes = memory[i32nextPc + 1];    // operation mode
+    mode = memory[i32nextPc + 2];              // jmp template
+    i32nextPc = i32nextPc + 3;                        // increment pc
 
     if (!quiet) $write("ANONYMUS");
     if ((OprOperationBytes * 8) < 10) begin
@@ -596,21 +664,21 @@ task ex_jmp; begin
     if (!quiet) $write("%0d\n", a);
     case (mode)
         // normal jmp 
-        8'h00: pc = a;
+        8'h00: i32nextPc = a;
         // if equal jmp
-        8'h01: begin if (flags[0]) pc = a;end
+        8'h01: begin if (flags[0]) i32nextPc = a;end
         // if less jmp
-        8'h02: begin if (flags[1]) pc = a;end
+        8'h02: begin if (flags[1]) i32nextPc = a;end
         // if greater jmp
-        8'h03: begin if (flags[2]) pc = a;end
+        8'h03: begin if (flags[2]) i32nextPc = a;end
         // call
-        8'h04: begin save_dir(); pc = a; end
+        8'h04: begin save_dir(); i32nextPc = a; end
     endcase
 end endtask
 task ex_sdx; begin
-    mode = memory[pc];
-    OprOperationBytes = memory[pc + 1];
-    pc = pc + 2;
+    mode = memory[i32nextPc];
+    OprOperationBytes = memory[i32nextPc + 1];
+    i32nextPc = i32nextPc + 2;
 
     operateInstant(mode[3:0],OprOperationBytes, a);
     if (!quiet) $write("ANONYMUS");
@@ -627,9 +695,9 @@ task ex_sdx; begin
     end
 end endtask
 task ex_int; begin
-    mode = memory[pc];
-    OprOperationBytes = memory[pc + 1];
-    pc = pc + 2;
+    mode = memory[i32nextPc];
+    OprOperationBytes = memory[i32nextPc + 1];
+    i32nextPc = i32nextPc + 2;
 
     operateInstant(mode[3:0],OprOperationBytes, a);
     if (!quiet) $write("ANONYMUS");
@@ -643,10 +711,10 @@ task ex_int; begin
     int_launch(a);
 end endtask
 task ex_wrx; begin
-    mode = memory[pc];
-    OprOperationBytes = memory[pc + 1];
-    b = memory[pc + 2];
-    pc = pc + 3;
+    mode = memory[i32nextPc];
+    OprOperationBytes = memory[i32nextPc + 1];
+    b = memory[i32nextPc + 2];
+    i32nextPc = i32nextPc + 3;
 
     if (!quiet) $write("ANONYMUS");
     if ((OprOperationBytes * 8) < 10) begin
@@ -690,7 +758,7 @@ task int_launch; input [31:0] abn; begin
         memory[vector_base + offset + 2],
         memory[vector_base + offset + 3]
     };
-    pc = irq_vector;
+    i32nextPc = irq_vector;
 end endtask
 task irq_check; begin
     if (!quiet) $write("%d (%8x) ",pc - 1, pc);
@@ -707,7 +775,7 @@ task irq_check; begin
         memory[vector_base + offset + 2],
         memory[vector_base + offset + 3]
     };
-    pc = irq_vector;
+    i32nextPc = irq_vector;
 end endtask
 
 // ================= 64 bit ISA mode in action =================
@@ -728,6 +796,7 @@ begin
     7: regVal = x4;
     8: regVal = x5;
     9: regVal = x6;
+    10:regVal = i64lnk;
     endcase
 end endtask
 
@@ -744,6 +813,7 @@ begin
     7: x4   = regVal;
     8: x5   = regVal;
     9: x6   = regVal;
+    10:i64lnk=regVal;
     endcase
 end
 endtask
@@ -778,12 +848,48 @@ begin
     endcase
 end endfunction
 
+task readInm64MaxNonRoot; 
+input [7:0] bytesLen; 
+input [63:0] baseAddr; 
+output [63:0] result;
+begin
+    if (!checIfMemkBoundles64Exepction(baseAddr,1) && !checIfMemkBoundles64Exepction(baseAddr + bytesLen,1)) begin
+        case (bytesLen)
+            1: result = memory[baseAddr];
+            2: result = {
+                memory[baseAddr],
+                memory[baseAddr + 1]
+                };
+            4: result = {
+                memory[baseAddr],
+                memory[baseAddr + 1],
+                memory[baseAddr + 2],
+                memory[baseAddr + 3]
+                };
+            8: result = {
+                memory[baseAddr],
+                memory[baseAddr + 1],
+                memory[baseAddr + 2],
+                memory[baseAddr + 3],
+                memory[baseAddr + 4],
+                memory[baseAddr + 5],
+                memory[baseAddr + 6],
+                memory[baseAddr + 7]
+                };
+            default: result = 0;
+        endcase
+    end
+    else begin
+        irqJmp64(32'h00000000); // segmentation fault
+    end
+end endtask
+
 localparam CpuIntDescIInTbl = 0;
 localparam CpuLvlSetsIInTbl = 1;
 localparam CpuIOMIInTbl     = 2;
 
 localparam IdtDescPartSize  = 16;
-localparam LevelPrivSize    = 8;
+localparam LevelPrivSize    = 16;
 
 localparam IdtDescIsaOffset = 0;
 localparam IdtDescPrivOffset= 4;
@@ -793,6 +899,10 @@ localparam LvlDescSizeField = 8;
 localparam LvlDescNField    = 2;
 localparam LvlDescPermsOff  = LvlDescSizeField * 1;
 localparam LvlDescSize      = LvlDescSizeField * LvlDescNField;
+
+localparam MemMapDescSize   = 8;
+localparam MemMapDescEndOff = MemMapDescSize * 1;
+localparam MemMapDescEntry  = MemMapDescSize * 2;
 
 reg  [63:0] i64irqsft     = 64'hFFFFFFFFFFFFFFFF;
 reg  [63:0] i64perms      = 64'hFFFFFFFFFFFFFFFF;
@@ -815,6 +925,12 @@ reg  [63:0] xpc           = 0;
 `define i64isfunc       readInm64Max(8, `i64isrdptr + IdtDescFuncOffset)
 `define i64isprivInd    `i64levelTable + (`i64ispriv * LevelPrivSize)
 
+`define i64iprivmem     readInm64Max(LvlDescSizeField,`i64isprivInd)
+`define i64privmema     `i64permTable + (`i64iprivmem * MemMapDescEntry)
+
+`define i64privmemstart readInm64Max(MemMapDescSize, `i64privmema)
+`define i64privmemend   readInm64Max(MemMapDescSize, `i64privmema + MemMapDescEndOff)
+
 function [63:0] CpuTableEntry;
 input [31:0] index;
 begin
@@ -822,35 +938,132 @@ begin
 end
 endfunction
 
+task saveThingInStack64;
+input [63:0] data;
+begin
+    xsp = xsp - 8;
+    memory[xsp]     = data[63:56];
+    memory[xsp + 1] = data[55:48];
+    memory[xsp + 2] = data[47:40];
+    memory[xsp + 3] = data[39:32];
+    memory[xsp + 4] = data[31:24];
+    memory[xsp + 5] = data[23:16];
+    memory[xsp + 6] = data[15:8];
+    memory[xsp + 7] = data[7:0];
+end endtask
+
 task saveDir64; begin
     xsp = xsp - 8;
-    memory[xsp]     = pc[63:56];
-    memory[xsp + 1] = pc[55:48];
-    memory[xsp + 2] = pc[47:40];
-    memory[xsp + 3] = pc[39:32];
-    memory[xsp + 4] = pc[31:24];
-    memory[xsp + 5] = pc[23:16];
-    memory[xsp + 6] = pc[15:8];
-    memory[xsp + 7] = pc[7:0];
+    memory[xsp]     = xpc[63:56];
+    memory[xsp + 1] = xpc[55:48];
+    memory[xsp + 2] = xpc[47:40];
+    memory[xsp + 3] = xpc[39:32];
+    memory[xsp + 4] = xpc[31:24];
+    memory[xsp + 5] = xpc[23:16];
+    memory[xsp + 6] = xpc[15:8];
+    memory[xsp + 7] = xpc[7:0];
 end endtask
 
 task irqJmp64;
 input [31:0] irqId;
 begin
+    i64a = (
+        (i64perms[23:0] << 9) |
+        (flags << 1) |
+        in64Bit
+        );
+    saveThingInStack64(i64a);
     saveDir64();
     i64irqsft = irqId;
+    i64proMemStart = `i64privmemstart;
+    i64proMemEnd   = `i64privmemend;
     i64perms =  readInm64Max(LvlDescSizeField,`i64isprivInd + LvlDescPermsOff);
     xpc      = `i64isfunc;
+    pc       = xpc[31:0];
+    i64temp  = `i64isisau;
+    in64Bit  = i64temp[0];
+end
+endtask
+
+function checIfMemkBoundles64Exepction;
+input [63:0] addr;
+input        action; // 0: write, 1:read
+begin
+
+    // Bit 0 de perms: se puede escribir en lo permitido
+    // Bit 1 de perms: se puede leer en lo permitido
+    // Bit 2 de perms: se puede escribir en lo no permitido
+    // Bit 3 de perms: se puede leer en lo no permitido
+
+    checIfMemkBoundles64Exepction = 0;
+
+    // verificar si es valida la region de memoria
+    if (i64proMemStart > i64proMemEnd) 
+        checIfMemkBoundles64Exepction = 1;
+    else if (i64proMemEnd < i64proMemStart) 
+        checIfMemkBoundles64Exepction = 1;
+
+    // si se hizo la operacion dentro de la descripcion
+    else if (addr >= i64proMemStart && addr <= i64proMemEnd) begin
+        if (action == 0 && !i64perms[0]) 
+            checIfMemkBoundles64Exepction = 1; // no tiene el permiso de escribir en lo permitido
+        if (action == 1 && !i64perms[1]) 
+            checIfMemkBoundles64Exepction = 1; // no tiene el permiso de leer en lo permitido
+    end
+
+    // los permisos de lo no permitido
+    else begin
+        if (action == 0 && !i64perms[2]) 
+            checIfMemkBoundles64Exepction = 1; // no tiene el permiso de escribir en lo permitido
+        if (action == 1 && !i64perms[3]) 
+            checIfMemkBoundles64Exepction = 1; // no tiene el permiso de leer en lo permitido
+    end
+end
+endfunction
+
+task WriteMem64; 
+input [63:0]    addr;
+input [7:0]     val;
+begin
+    if (!checIfMemkBoundles64Exepction(addr, 0)) begin
+        if (addr > 63999) begin
+            CWFDD = 1;
+            dev_wrt_en   <= 1;
+            dev_wrt_addr = (addr[31:0]) - 64000;
+            dev_wrt_val  = val;
+        end
+        CWFDM = 2;
+        mem_wrt_ene   = 1;
+        mem_wrt_addre = addr[31:0];
+        mem_wrt_vale  = val;
+        memory[addr] = val;
+    end
+    else begin
+        irqJmp64(32'h00000000); // segmentation fault
+    end
+end endtask
+
+task irqRet64;
+begin
+    xpc = readInm64Max(8, xsp);
+    pc <= xpc[31:0];
+    xsp = xsp + 8;
+    i64a = readInm64Max(8, xsp);
+    xsp = xsp + 8;
+
+    i64perms = i64a[23:9];
+    flags = i64a[8:1];
+    in64Bit = i64a[0];
 end
 endtask
 
 task irqHandler64; 
 begin
-    if (!quiet) $write("%d (%8x) ",pc - 1, pc);
+    if (!quiet) $write("%d (%8x) ",xpc[31:0] - 4, xpc[31:0]);
     if (!quiet) $display("HRD I64 %0d %0d", irq_addr, irq_data);
     paused = 0;
     irq_ack <= 1; 
-    irqJmp64(irq_addr);
+    irqJmp64(irq_addr + 32'h0F);
 end 
 endtask
 
@@ -861,11 +1074,15 @@ endtask
 // | #LOOP #NONDEBUG #DEBUG                       |
 // ------------------------------------------------
 always @(posedge clk) begin
-    if (mem_wrt_bool) 
+    if (mem_wrt_bool) begin
         memory[mem_wrt_addr] <= mem_wrt_val;
+        mem_wrt_ack <= 1;
+    end
 
-    if (mem_rdr_bool) 
+    if (mem_rdr_bool) begin
         mem_rdr_val <= memory[mem_rdr_addr]; 
+        mem_rdr_ack <= 1;
+    end
     if (CWFDD == 1) begin
         dev_wrt_en <= 0;
         CWFDD = CWFDD - 1;
@@ -892,10 +1109,12 @@ always @(posedge clk) begin
         
         if (mem_wrt_bool) begin
             memory[mem_wrt_addr] <= mem_wrt_val;
+            mem_wrt_ack <= 1;
         end
 
         if (mem_rdr_bool) begin 
             mem_rdr_val <= memory[mem_rdr_addr]; 
+            mem_rdr_ack <= 1;
         end
 
         // check alu
@@ -916,7 +1135,8 @@ always @(posedge clk) begin
                 i64bytes[1] <= memory[xpc + 1];
                 i64bytes[2] <= memory[xpc + 2];
                 i64bytes[3] <= memory[xpc + 3];
-                xpc <= xpc + 4;
+                xpc = xpc + 4;
+                i32nextPc <= xpc[31:0];
                 i64pend <= 1;
             end
             else begin
@@ -965,8 +1185,20 @@ always @(posedge clk) begin
                             endcase
                             if (!quiet) $display("JMP TO %0d IF FLAG %0d", i64temp, i64bytes[2][3:0]);
 
-                            if (i64a) xpc = i64temp;
+                            if (i64bytes[2][3:0] == 4) begin
+                                i64lnk = xpc;
+                                i64a =   1;
+                            end
+
+                            if (i64a) begin 
+                                xpc =    i64temp;
+                                pc <=    xpc[31:0];
+                             end
                         end // jmp if a condition is true
+                        else if (i64bytes[2] == 8'h03) begin
+                            $display("INT %0d", i64bytes[3]);
+                            irqJmp64(i64bytes[3]);
+                        end // interruption
                         else if (i64bytes[2] == 8'hFF) begin
                             if (i64bytes[3] == 8'h01) begin
                                 inms64[selectedinm64] <= 0;
@@ -982,8 +1214,16 @@ always @(posedge clk) begin
                                 flags[3] = 1;
 
                                 if (!quiet) $display("CALC %0d NEW FLAGS %0d", i64a, flags);
-
                             end // calculate thing
+                            else if (i64bytes[3] == 8'h02) begin
+                                irqRet64();
+                                if (!quiet) $display("IRET");
+                            end // interruption return
+                            else if (i64bytes[3] == 8'h03) begin
+                                irqRet64();
+                                if (!quiet) $display("HLT");
+                                paused <= 1;
+                            end
                         end // extend ins to pad
                     end // extend ins to pad
                     else if ((i64bytes[1] & 8'hF0) == 8'h10) begin
@@ -1013,7 +1253,7 @@ always @(posedge clk) begin
                             0: solveReg64bit(i64bytes[2][3:0], i64temp);
                             1: i64temp = inms64[i64bytes[2][3:0]];
                         endcase
-                        inms64[i64bytes[3]] = readInm64Max(i64bysiz, i64temp);
+                        readInm64MaxNonRoot(i64bysiz, i64temp, inms64[i64bytes[3]]);
 
                         if (!quiet) $display("INM LFM STEPS %0d OF %0d TO %0d (%0d)", i64bysiz , i64temp, i64bytes[3], inms64[i64bytes[3]]);
                     end // load from mem
@@ -1029,7 +1269,7 @@ always @(posedge clk) begin
                         endcase
                         if (!quiet) $display("MEM WRT AT %0d STEPS %0d DATA %0d", i64memre ,i64bysiz, i64temp);
                         for (i = 0; i < i64bysiz; i = i + 1) begin
-                            write_mem_byte(i64memre + i, (i64temp >> (8 * (i64bysiz - 1 - i))) & 8'hFF);
+                            WriteMem64(i64memre + i, (i64temp >> (8 * (i64bysiz - 1 - i))) & 8'hFF);
                         end
                     end // mem write
                 end // mem 
@@ -1038,8 +1278,8 @@ always @(posedge clk) begin
             
         end
         else begin
-            pc = pc + 1;                               // increment program counter
-            if (!quiet) $write("%d (%8x) ",pc - 1, pc);
+            i32nextPc = pc + 1;                               // increment program counter
+            if (!quiet) $write("%d (%8x) ",pc, pc);
             case (ir)
                 // LPX = Load Pointer eXpretion
                 8'h01: ex_lpx();
@@ -1050,7 +1290,7 @@ always @(posedge clk) begin
                 // OPR = Operation Propurse with Result
                 8'h04: ex_opr();
                 // HLT = Halt main Tread
-                8'h05: begin if (!quiet) $display("NULL0      HLT"); paused = 1; end
+                8'h05: begin if (!quiet) $display("NULL0      HLT"); paused <= 1; end
                 // CMP = Compare Multi Parse
                 8'h06: ex_cmp();
                 // JMP = Jump Multi Templates
@@ -1063,14 +1303,23 @@ always @(posedge clk) begin
                 8'h0A: ex_wrx();
                 // DBGAC64
                 8'h0B: begin 
+                    $display("NULL0      CH64");
                     xpc = pc;
-                    in64Bit <= 1; 
+                    in64Bit = 1; 
+                    i64runinbg = 1;
+                end
+                // IRET
+                8'h0C: begin
+                    $display("NULL0      IRET");
+                    irqRet64();
                 end
             endcase
         end
     end
     end
     $fflush();
+    pc <= i32nextPc;
+
 end
 
 endmodule
