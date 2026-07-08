@@ -3,3 +3,5 @@ gena.py
 font.S
 PngSave.bmp
 auto1.js
+*.c++
+*.cpp

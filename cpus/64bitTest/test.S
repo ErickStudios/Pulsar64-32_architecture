@@ -122,10 +122,9 @@ segfault:
     
 ProgramsSafeZone:
 user_load:
-    srr         as:r0, r1
     li64        sp, KernelStackTop ; iniciar el stack del usuario
     li64        r0, adaa    ; puntero al mensaje
-    li64        r6, putmsg  ; funcion para poner mensaje
+    li64        bl, putmsg  ; funcion para poner mensaje
     bl          r6          ; lanzar funcion y guardar el retorno en lnk
     hlt                     ; programa terminado
 adaa:
