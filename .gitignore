@@ -5,3 +5,5 @@ PngSave.bmp
 auto1.js
 *.c++
 *.cpp
+*.d
+*.log

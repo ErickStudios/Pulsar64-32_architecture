@@ -25,7 +25,9 @@ module cpu(
     output reg [7:0]    mem_wrt_vale,
     // Cuando ya leyo/escribio desde fuera
     output reg          mem_wrt_ack,
-    output reg          mem_rdr_ack
+    output reg          mem_rdr_ack,
+    // si la cpu esta tranquila
+    input               quiet
 );
 
 // ============== cpu variables ==============}
@@ -73,7 +75,6 @@ reg [31:0]          offset;
 reg [31:0]          irq_vector;
 
 // ============== Cpu Dbg and running ==============
-reg                 quiet = 0;
 reg                 paused;
 
 // ============== States ==============
@@ -974,7 +975,7 @@ always @(posedge clk) begin
                     endcase
                     set64BitReg(i64bytes[1][7:4], i64temp);
                     solveReg64bit(i64bytes[1][7:4], i64temp);
-                    $display("OPERATION%0d %0d ((%0d)%0d (%0d)%0d) = %0d", i64opr, i64bytes[0][7:4], i64bytes[1][3:2], i64a, i64bytes[1][1:0], i64b, i64temp); 
+                    if (!quiet) $display("OPERATION%0d %0d ((%0d)%0d (%0d)%0d) = %0d", i64opr, i64bytes[0][7:4], i64bytes[1][3:2], i64a, i64bytes[1][1:0], i64b, i64temp); 
                 end // operations
                 else begin case (i64bytes[0]) 
                 8'h01: begin
@@ -1007,7 +1008,7 @@ always @(posedge clk) begin
                              end
                         end // jmp if a condition is true
                         else if (i64bytes[2] == 8'h03) begin
-                            $display("INT %0d", i64bytes[3]);
+                            if (!quiet) $display("INT %0d", i64bytes[3]);
                             irqJmp64(i64bytes[3]);
                         end // interruption
                         else if (i64bytes[2] == 8'hFF) begin
@@ -1071,14 +1072,14 @@ always @(posedge clk) begin
                     else if (i64bytes[1] == 8'h05) begin
                         solveReg64bit(i64bytes[3][3:0], i64b);
                         set64bitSegReg(i64bytes[2], i64b);
-                        $display("WSR %0d TO %0d", i64bytes[2], i64b);
+                        if (!quiet) $display("WSR %0d TO %0d", i64bytes[2], i64b);
                     end // write segment register
                     else if (((i64bytes[1] & 8'hF0) == 8'h50)) begin
                         solveSegReg64bit(i64bytes[1] & 8'h0F, i64a);
                         solveReg64bit(i64bytes[2][3:0], i64b);
                         i64temp = i64a + i64b;
                         set64BitReg(i64bytes[3][3:0], i64temp);
-                        $display("RSR %0d:%0d TO %0d", i64a, i64b, i64bytes[3][3:0]);
+                        if (!quiet) $display("RSR %0d:%0d TO %0d", i64a, i64b, i64bytes[3][3:0]);
                     end // get a offset in a segment register
                 end // inms manager
                 8'h02: begin
@@ -1127,14 +1128,14 @@ always @(posedge clk) begin
                 8'h0A: ex_wrx();
                 // DBGAC64
                 8'h0B: begin 
-                    $display("NULL0      CH64");
+                    if (!quiet) $display("NULL0      CH64");
                     xpc = pc + 1;
                     in64Bit = 1; 
                     i64runinbg = 1;
                 end
                 // IRET
                 8'h0C: begin
-                    $display("NULL0      IRET");
+                    if (!quiet) $display("NULL0      IRET");
                     irqRet64();
                 end
                 default: ;

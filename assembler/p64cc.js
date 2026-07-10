@@ -1,12 +1,12 @@
-class BaseTypeConstructor {
+export class BaseTypeConstructor {
     constructor() { }
     construct() { throw new TypeError("the base type has not constructor") }
     calculeSize() { return 0; }
 }
-class BaseTypeInstance {
+export class BaseTypeInstance {
     constructor(typeClassName) { this.cls = typeClassName; }
 }
-class ArrayTypeConstructor
+export class ArrayTypeConstructor
 extends BaseTypeConstructor {
     constructor(typeBase, elementsCount) {
         super();
@@ -25,7 +25,7 @@ extends BaseTypeConstructor {
         return new ArrayTypeInstance(this);
     }
 }
-class NativeType 
+export class NativeType 
 extends BaseTypeConstructor {
     constructor(sizeof) {
         super();
@@ -38,7 +38,7 @@ extends BaseTypeConstructor {
         return new NativeTypeInstance(this);
     }
 };
-class StructureType 
+export class StructureType 
 extends BaseTypeConstructor {
     constructor() {
         super();
@@ -62,7 +62,7 @@ extends BaseTypeConstructor {
         return new StructuredTypeInstance(this);
     }
 };
-class ArrayTypeInstance
+export class ArrayTypeInstance
 extends BaseTypeInstance {
     constructor(aParent) {
         if (!(aParent instanceof ArrayTypeConstructor)) 
@@ -74,7 +74,7 @@ extends BaseTypeInstance {
         this.typeBase = aParent.typeBase;
     }
 };
-class StructuredTypeInstance 
+export class StructuredTypeInstance 
 extends BaseTypeInstance {
     constructor(sParent) {
         if (!(sParent instanceof StructureType)) 
@@ -91,7 +91,7 @@ extends BaseTypeInstance {
         }
     }
 };
-class NativeTypeInstance 
+export class NativeTypeInstance 
 extends BaseTypeInstance {
     constructor(tParent) {
         if (!(tParent instanceof NativeType)) 
@@ -183,7 +183,7 @@ function tokenize(code) {
   return tokens;
 }
 /** @param {{type: string;value: number | string;}[]} tokens  */
-function parse(tokens) {
+export function parse(tokens) {
     let i = 0;
 
     let typesBuiltin = {
@@ -386,7 +386,7 @@ function parse(tokens) {
 
     return body;
 }
-function codeGen(parsed) {
+export function codeGen(parsed) {
     let mappedSizes = {
         1: 'byte',
         2: 'word',
@@ -536,7 +536,7 @@ else {
 
     return parseAGroup(parsed);
 }
-let xd = tokenize(`
+/*let xd = tokenize(`
 struct tableElement {
     long identifier;
     long index;
@@ -562,6 +562,4 @@ b_xd_index:
     qword 0
 
 
- */
-
-console.log(codeGen(a));
+console.log(codeGen(a));*/

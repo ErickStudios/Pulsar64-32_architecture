@@ -25,6 +25,8 @@ reg         WrtExtAct;
 wire        WrtSucces;
 
 wire        RdrSucces;
+reg         CanContinue = 0;
+reg         CpuQuiet = 0;
 
 reg  [7:0]  FirmwareROM [0:FirmwareSize];
 reg  [31:0] FdROMCpyInd = 0;
@@ -47,7 +49,8 @@ cpu uut(
     .mem_wrt_val    (WrtExtVal),
     .mem_wrt_bool   (WrtExtAct),
     .mem_wrt_ack    (WrtSucces),
-    .mem_rdr_ack    (RdrSucces)
+    .mem_rdr_ack    (RdrSucces),
+    .quiet          (CpuQuiet)
 );
 
 // Direction Checker
@@ -64,45 +67,65 @@ input [7:0] char;
 begin $write("%c", char); end
 endtask
 
-always @(posedge SoftClock or posedge HardReset) begin
-    if (HardReset) begin
-        FdROMCpyInd    <= 0;
-        WrtExtAct      <= 0;
-        PcCpyFdPending <= 0;
-        PcCpyFdFile    <= 1;
-    end else if (PcCpyFdFile) begin
-        if (!WrtSucces && !WrtExtAct) begin
+// Continuer Of the Writing Blk
+always @(WrtSucces) begin
+    if (!HardReset) begin
+        // Continue With Write For Send Signal
+        if (WrtExtAct & WrtSucces & !CanContinue) begin
+            WrtExtAct <= 0;
+            CanContinue <= 1;
+        end
+    end
+end
+
+// Continue Unabled For Dont Repeat
+always @(posedge SoftClock) begin
+    // If Continue Its Actived
+    if (CanContinue) begin
+        CanContinue <= 0;
+
+        // Routine For Coppy Rom
+        if (PcCpyFdFile) begin
+            FdROMCpyInd <= FdROMCpyInd + 1;
             WrtExtDir <= FdROMCpyInd;
-            WrtExtVal <= FirmwareROM[FdROMCpyInd];
             WrtExtAct <= 1;
-        end else if (WrtSucces) begin
-            WrtExtAct     <= 0;
-            FdROMCpyInd   <= FdROMCpyInd + 1;
+            WrtExtVal <= FirmwareROM[FdROMCpyInd];
 
             if (FdROMCpyInd >= FirmwareSize - 1) begin
-                PcCpyFdFile <= 0;
+                PcCpyFdFile <= 0; 
                 SoftReset <= 0;
             end
         end
     end
 end
 
+// Reset Function For The Machine
+always @(posedge SoftClock or posedge HardReset) begin
+    // Hard Reset
+    if (HardReset) begin
+        // Initialize reset coppy function
+        FdROMCpyInd    <= 0;
+        WrtExtAct      <= 0;
+        PcCpyFdPending <= 0;
+        PcCpyFdFile    <= 1;
+        CanContinue    <= 1;
+    end
+end
+
 // Serial COM1 multiplexor
 always @(WrtedEvL) begin
-    if (chkMe(UARTConAddr))
+    if (chkMe(UARTConAddr)) 
         debugChar(WrtedVal);
 end
 
 initial begin
     // Load Fd Image
     $display    ("pulsar5024XM_x32 chip debug");
-    $readmemh   ("program.hex", uut.memory);
+    $readmemh   ("program.hex", FirmwareROM);
 
     // Initialize For First Time
-    #10         SoftReset = 1;
-    #1          SoftReset = 0;
-
-    
+    #10         HardReset = 1;
+    #1          HardReset = 0;
 
     // Finish Simulation
     #1000000    $finish;
