@@ -1,5 +1,5 @@
-node ../../assembler/pulsarAsm.js test.S program.bin -rbin
-node ../../assembler/pulsarAsm.js testDisk.S test.img -rbin
+node ../../Assembler/PulsarAssembly.js test.S program.bin -rbin
+node ../../Assembler/PulsarAssembly.js testDisk.S test.img -rbin
 
 verilator \
     --cc cpu.v \

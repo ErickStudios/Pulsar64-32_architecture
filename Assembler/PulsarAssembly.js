@@ -1,6 +1,5 @@
 import { argv, exit } from "node:process";
-import {LibraryAssembler as p3264asm } from "./asm.js";
-//import * as Pulsar64CCompiler from "./p64cc.js"
+import {LibraryAssembler as p3264asm } from "./AsmLibrary/StandardAssembler.js";
 import * as fileSystem from "node:fs";
 
 let asmFile = argv[2];
