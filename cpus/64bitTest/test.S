@@ -5,6 +5,13 @@ vectors:
     Mode32 EQU 00h ; modo de ejecucion
     Mode64 EQU 01h ; modo de ejecucion
 
+    Align 24
+DiskFsSelected: Byte 0
+DiskSector:     Byte 0
+DiskOutpudDir:  Byte 0
+DiskReadTrigger:Byte 0
+DiskReadFinish: Byte 0
+
     Byte        0
 start:
     dbgAc64                 ; configurar el 64 (skip solo para debug)
@@ -84,6 +91,14 @@ InterruptionsTable:
     Dword       01h         ; indice de la paleta de nivel de privilegio
     Qword       user_load   ; manejador
 
+    Dword       Mode64      ; modo de ISA en el que operara
+    Dword       00h         ; indice de la paleta de nivel de privilegio
+    Qword       bootsrap    ; manejador
+
+    Dword       Mode64      ; modo de ISA en el que operara
+    Dword       00h         ; indice de la paleta de nivel de privilegio
+    Qword       diskRead    ; manejador
+
     Align       16
 LevelsSettings:
     Qword       00h, 0FFFFFFFFH ; IOM + PRIVS (kernel)
@@ -119,13 +134,30 @@ isr2:
 segfault:
     li64        r0, hang    ; obtener direccion del panic
     jmp         r0          ; saltar
-    
+
+none:
+    hlt
+    iret
+
+diskRead:
+    li64        lnk, readDisk
+    bl          lnk
+    iret 
+
+bootsrap:
+    bl          lnk
+    iret 
+
 ProgramsSafeZone:
 user_load:
     li64        sp, KernelStackTop ; iniciar el stack del usuario
-    li64        r0, adaa    ; puntero al mensaje
-    li64        lnk, putmsg ; funcion para poner mensaje
-    bl          lnk         ; lanzar funcion y guardar el retorno en lnk
+
+    li64        r0, 0       ; fs 
+    li64        r1, 0       ; sector
+    li64        r2, 8200h   ; direccion donde escribira
+    int         14h         ; funcion para lanzar funciones desde el anillo 0
+
+    jmp         r2 
     hlt                     ; programa terminado
 adaa:
     Byte 'a','b','c',0
@@ -175,6 +207,94 @@ EndProgramSafeZone:
 hang:
     li64        r0, hang    ; obtener direccion del label
     jmp         r0          ; saltar
+
+readDisk:
+    ; escribir el FS donde leera
+    push        r1
+    push        r2
+    push        r3
+    add         r2, r0, 0   ; añadir
+    li64        r1, DiskFsSelected
+    add         r3, r2, 0   ; mover
+    shr         r3, r3, 8   ; shiftear
+    and         r3, r3, 0FFh; mascara
+    mwr8        r1, r3      ; escribir
+    add         r3, r2, 0   ; mover
+    and         r3, r3, 0FFh; mascara
+    mwr8        r1, r3      ; escribir
+    pop         r3
+    pop         r2
+    pop         r1
+
+    ; escribir el Sector donde leera
+    push        r1
+    push        r2
+    push        r3
+    add         r2, r1, 0   ; añadir
+    li64        r1, DiskSector
+    add         r3, r2, 0   ; mover
+    shr         r3, r3, 8   ; shiftear
+    and         r3, r3, 0FFh; mascara
+    mwr8        r1, r3      ; escribir
+    add         r3, r2, 0   ; mover
+    and         r3, r3, 0FFh; mascara
+    mwr8        r1, r3      ; escribir
+    pop         r3
+    pop         r2
+    pop         r1
+
+    ; escribir la direccion de memoria donde escribira
+    push        r1
+    push        r2
+    push        r3
+    li64        r1, DiskOutpudDir
+    add         r3, r2, 0   ; mover
+    shr         r3, r3, 24  ; shiftear
+    and         r3, r3, 0FFh; mascara
+    mwr8        r1, r3      ; escribir
+    add         r3, r2, 0   ; mover
+    shr         r3, r3, 16  ; shiftear
+    and         r3, r3, 0FFh; mascara
+    mwr8        r1, r3      ; escribir
+    add         r3, r2, 0   ; mover
+    shr         r3, r3, 8   ; shiftear
+    and         r3, r3, 0FFh; mascara
+    mwr8        r1, r3      ; escribir
+    add         r3, r2, 0   ; mover
+    and         r3, r3, 0FFh; mascara
+    mwr8        r1, r3      ; escribir
+    pop         r3
+    pop         r2
+    pop         r1
+
+    ; activar trigger
+    push        r1
+    push        r2
+    push        r3
+
+    li64        r1, DiskReadFinish
+    add         r2, 0, 0
+    mwr8        r1, r2
+    li64        r1, DiskReadTrigger
+    add         r2, 0, 1
+    mwr8        r1, r2
+    li64        r1, DiskReadFinish
+
+chloop:
+    ifm8        02h, r1
+    linm        r2, 02h
+    sub         r3, 1, r2
+    calc        r3
+    li64        r3, echloop
+    jifeq       r3
+    li64        r3, chloop
+    jmp         r3
+echloop:
+    pop         r3
+    pop         r2
+    pop         r1
+
+    jmp         lnk
 
 putmsg:
     sub         sp, sp, 8   ; restar

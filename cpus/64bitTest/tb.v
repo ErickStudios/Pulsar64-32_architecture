@@ -2,39 +2,42 @@ module tb;
 
 // ================= MACHINE PARAMS =================
 localparam UARTConAddr = 32'h100000;    // Uart COM1 Addr
-localparam FirmwareSize= 32'h7FFF;         // Firmware Size
+localparam FirmwareSize= 32'h7FFF;      // Firmware Size
 
 // ================= MACHINE REGISTERS =================
-reg         SoftClock = 0;
-reg         SoftReset = 1;
-reg         HardReset = 0;
-always #1   SoftClock = ~SoftClock;
-reg         IrqBool;
-reg  [31:0] IrqAddr;
-reg  [7:0]  IrqData;
-wire        IrqAck;
-reg  [7:0]  selectec_dev;
+reg         SoftClock = 0;              // software clock
+reg         SoftReset = 1;              // software reset
+reg         HardReset = 0;              // hard reset
+always #1   SoftClock = ~SoftClock;     // loop for software clock
+reg         IrqBool   = 0;              // boolean of the irq
+reg  [31:0] IrqAddr   = 0;              // address of irq
+reg  [7:0]  IrqData   = 0;              // data of irq
+wire        IrqAck;                     // irq stop
+reg  [7:0]  selectec_dev;               // selected device
 
-wire [31:0] WrtedDir;
-wire [7:0]  WrtedVal;
-wire        WrtedEvL;
+// ================= WRITE MEM EVENT =================
+wire [31:0] WrtedDir;                   // writed address
+wire [7:0]  WrtedVal;                   // writed value
+wire        WrtedEvL;                   // writed trigger
 
-reg  [31:0] WrtExtDir;
-reg  [7:0]  WrtExtVal;
-reg         WrtExtAct;
-wire        WrtSucces;
+// ================= WRITE MEM EXTERNAL =================
+reg  [31:0] WrtExtDir = 0;              // address to write
+reg  [7:0]  WrtExtVal = 0;              // value to write
+reg         WrtExtAct = 0;              // write active
+wire        WrtSucces;                  // write completed
 
-wire        RdrSucces;
-reg         CanContinue = 0;
-reg         CpuQuiet = 0;
+// ================= CPU STATE =================
+wire        RdrSucces;                  // read completed
+reg         CanContinue = 0;            // can continue
+reg         CpuQuiet = 0;               // cpu dont show trace
 
+// ================= FIRMWARE ROM FNCS =================
 reg  [7:0]  FirmwareROM [0:FirmwareSize];
 reg  [31:0] FdROMCpyInd = 0;
 reg         PcCpyFdFile = 0;
 reg         PcCpyFdPending = 1;
 
 // ================= CHIP BUS =================
-
 cpu uut(
     .clk            (SoftClock),
     .reset          (SoftReset),
@@ -57,7 +60,7 @@ cpu uut(
 function chkMe;
 input [31:0] dir;
 begin
-    chkMe = WrtedEvL & WrtedDir == dir;
+    chkMe = WrtedEvL & (WrtedDir == dir);
 end
 endfunction
 
@@ -128,7 +131,7 @@ initial begin
     #1          HardReset = 0;
 
     // Finish Simulation
-    #1000000    $finish;
+    #10000000    $finish;
 end
 
 endmodule

@@ -7,3 +7,7 @@ auto1.js
 *.cpp
 *.d
 *.log
+*.mk
+*.h
+*.o
+*.gch

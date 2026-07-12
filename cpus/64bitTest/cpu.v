@@ -287,7 +287,8 @@ module cpu(
     output reg          mem_wrt_ack,
     output reg          mem_rdr_ack,
     // si la cpu esta tranquila
-    input               quiet
+    input               quiet,
+    output reg [63:0]   epc
 );
 
 // ============== cpu variables ==============}
@@ -1232,6 +1233,10 @@ always @(posedge clk) begin
                         1: i64temp = i64a - i64b;
                         2: i64temp = i64a * i64b;
                         3: i64temp = i64a / i64b;
+                        4: i64temp = i64a & i64b;
+                        5: i64temp = i64a | i64b;
+                        6: i64temp = i64a >> i64b;
+                        7: i64temp = i64a << i64b;
                     endcase
                     set64BitReg(i64bytes[1][7:4], i64temp);
                     solveReg64bit(i64bytes[1][7:4], i64temp);
@@ -1405,6 +1410,7 @@ always @(posedge clk) begin
     end
     $fflush();
     pc <= i32nextPc;
+    epc <= xpc;
     FirstCycleFromReset = 0;
 end
 

@@ -141,6 +141,10 @@ export function AssembleLineWithoutContext(line, ctx, len=null) {
       case 'WORD': return 2;
       case 'DWORD': return 4;
       case 'QWORD': return 8;
+      case 'DB': return 1;
+      case 'DW': return 2;
+      case 'DD': return 4;
+      case 'DQ': return 8;
     }
   }
   function parsePrimary() {
@@ -171,6 +175,31 @@ export function AssembleLineWithoutContext(line, ctx, len=null) {
         return ({ type: 'inm', value: result });
       }
     }
+    if (peek().value === '(') {
+      consume();
+      let x = parsePrimary();
+      let opr = consume().value;
+      let y = parsePrimary();
+
+      expect(')');
+
+      let bz = 0;
+
+      if (opr === '+') {
+        bz = Math.ceil(x.value + y.value);
+      }
+      else if (opr === '-') {
+        bz = Math.ceil(x.value - y.value);
+      }
+      else if (opr === '/') {
+        bz = Math.ceil(x.value / y.value);
+      }
+      else if (opr === '*') {
+        bz = Math.ceil(x.value * y.value);
+      }
+
+      return ({ type: 'inm', value: bz });
+    }
     if (typeof peek().value === 'number') return ({ type: 'inm', value: consume().value });
     if (peek7() === 'SP') {
       consume();
@@ -179,6 +208,9 @@ export function AssembleLineWithoutContext(line, ctx, len=null) {
     let ident;
     if (peek().type === 'identifier') {
       ident = consume();
+      if (fmt7(ident.value) === '__ORG') {
+        return ({ type: 'inm', value: ctx.orgIn });
+      }
       if (fmt7(ident.value) === 'OUT') {
         return ({ type: 'symbol', value: 'cpu.registers.result' });
       }
@@ -576,7 +608,11 @@ export function AssembleLineWithoutContext(line, ctx, len=null) {
     else if (ctx.in64 && peek7() === 'SUB')   parse64bitOperation(1);
     else if (ctx.in64 && peek7() === 'MUL')   parse64bitOperation(2);
     else if (ctx.in64 && peek7() === 'DIV')   parse64bitOperation(3);
-    
+    else if (ctx.in64 && peek7() === 'AND')   parse64bitOperation(4);
+    else if (ctx.in64 && peek7() === 'OR')    parse64bitOperation(5);
+    else if (ctx.in64 && peek7() === 'SHR')   parse64bitOperation(6);
+    else if (ctx.in64 && peek7() === 'SHL')   parse64bitOperation(7);
+
     else if (ctx.in64 && peek7() === 'LI16')  loadInmediate64bits(2);
     else if (ctx.in64 && peek7() === 'LI32')  loadInmediate64bits(4);
     else if (ctx.in64 && peek7() === 'LI64')  loadInmediate64bits(8);
@@ -587,6 +623,15 @@ export function AssembleLineWithoutContext(line, ctx, len=null) {
     else if (ctx.in64 && peek7() === 'JITRUE')parseJmpIfFlag64(3);
     else if (ctx.in64 && peek7() === 'JMP')   parseJmpIfFlag64(3);
     else if (ctx.in64 && peek7() === 'BL')    parseJmpIfFlag64(4);
+
+    else if (ctx.in64 && peek7() === 'PUSH') {
+      consume();
+      result.push(...AssembleLineWithoutContext(`sub sp, sp, 8 mwr64 sp, ${consume().value}`, ctx, len));
+    }
+    else if (ctx.in64 && peek7() === 'POP') {
+      consume();
+      result.push(...AssembleLineWithoutContext(`ifm64 02h, sp add sp, sp, 8 linm ${consume().value}, 02h`, ctx, len));
+    }
 
     else if (ctx.in64 && peek7() === 'LTBL') {
       consume(); 
