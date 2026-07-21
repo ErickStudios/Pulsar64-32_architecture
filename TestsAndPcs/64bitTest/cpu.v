@@ -352,7 +352,8 @@ reg [63:0]          i64CpuTbl,
                     i64b, 
                     i64memre, 
                     i64temp, 
-                    xsp, 
+                    xsp,
+                    xbp, 
                     i64lnk, 
                     x0, 
                     x1, 
@@ -809,6 +810,7 @@ begin
     8: regVal = x5;
     9: regVal = x6;
     10:regVal = i64lnk;
+    11:regVal = xbp;
     default: regVal = 0;
     endcase
 end endtask
@@ -827,6 +829,7 @@ begin
     8: x5   = regVal;
     9: x6   = regVal;
     10:i64lnk=regVal;
+    11:xbp  = regVal;
     default: ;
     endcase
 end

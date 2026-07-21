@@ -1,4 +1,4 @@
-node ../../Assembler/PulsarAssembly.js test.S program.bin -rbin
+node ../../Assembler/PulsarAssembly.js test2.S program.bin -rbin
 node ../../Assembler/PulsarAssembly.js testDisk.S test.img -rbin
 
 verilator \

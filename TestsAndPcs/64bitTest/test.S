@@ -20,20 +20,14 @@ start:
     li64        r0, TABLEC  ; cargar tope del stack
     srw         fs, r0      ; 01 05 05 03 (SR (R))
 
-    add         r0, 0, 0    ; limpiar r0
-    calc        r0          ; limpiar flags
+    cmp         r0, 0, 0
 
     li64        sp, STACK_TOP;cargar tope del stack
     li64        r0, CPUTABLE; cargar direccion de la tabla
     ltbl        r0          ; cargar tabla
-
-    sub         r0, 7, 7    ; restar ya que asi se calcula
-    calc        r0          ; actualizar flags (01 FF FF 23)
     
-    slcinm      02h         ; seleccionar el inm a editar
-    rstinm                  ; resetear el inm que se esta editando
-    ld64        TestEqual   ; valor a cargar
-
+    cmp         r0, 7, 7    ; equal thing
+    jifeq       TestEqual   ; equal
     jifeq       i(02h)      ; saltar al inmediato 2 (01 FF 3[BitToBeTruthyFor] TI)
 
     add         r0, 4, 5    ; xd  
@@ -120,28 +114,22 @@ isr1:
     org64
     Align       4
 isr2:
-    sub         sp, sp, 8   ; restar
-    mwr64       sp, r0      ; poner en el stack
+    push        r0          ; guardar r0
+    pop         r0          ; cargar r0
 
-    ifm64       02h, sp     ; obtener del el puntero al stack
-    add         sp, sp, 8   ; añadir
-    linm        r0, 02h     ; obtener inmediato
-    
     iret
 
 ; ================ EXCEPCIONES ================
     org64
 segfault:
-    li64        r0, hang    ; obtener direccion del panic
-    jmp         r0          ; saltar
+    jmp         hang        ; loop
 
 none:
     hlt
     iret
 
 diskRead:
-    li64        lnk, readDisk
-    bl          lnk
+    bl          readDisk
     iret 
 
 bootsrap:
@@ -273,7 +261,7 @@ readDisk:
     push        r3
 
     li64        r1, DiskReadFinish
-    add         r2, 0, 0
+    mov         r2, 0
     mwr8        r1, r2
     li64        r1, DiskReadTrigger
     add         r2, 0, 1
@@ -297,16 +285,11 @@ echloop:
     jmp         lnk
 
 putmsg:
-    sub         sp, sp, 8   ; restar
-    mwr64       sp, lnk     ; poner en el stack
-    sub         sp, sp, 8   ; restar
-    mwr64       sp, r0      ; poner en el stack
-    sub         sp, sp, 8   ; restar
-    mwr64       sp, r1      ; poner en el stack
-    sub         sp, sp, 8   ; restar
-    mwr64       sp, r2      ; poner en el stack
-    sub         sp, sp, 8   ; restar
-    mwr64       sp, r3      ; poner en el stack
+    push        lnk
+    push        r0
+    push        r1
+    push        r2
+    push        r3
 putmsgl:
     ifm8        02h, r0      ; obtener caracter
     linm        r1, 02h     ; obtener
@@ -320,19 +303,9 @@ putmsgl:
     li64        r3, putmsgl; direccion de fin
     jmp         r3
 putmsg_end:
-    ifm64       02h, sp     ; obtener del el puntero al stack
-    add         sp, sp, 8   ; añadir
-    linm        r3, 02h     ; obtener inmediato
-    ifm64       02h, sp     ; obtener del el puntero al stack
-    add         sp, sp, 8   ; añadir
-    linm        r2, 02h     ; obtener inmediato
-    ifm64       02h, sp     ; obtener del el puntero al stack
-    add         sp, sp, 8   ; añadir
-    linm        r1, 02h     ; obtener inmediato
-    ifm64       02h, sp     ; obtener del el puntero al stack
-    add         sp, sp, 8   ; añadir
-    linm        r0, 02h     ; obtener inmediato
-    ifm64       02h, sp     ; obtener del el puntero al stack
-    add         sp, sp, 8   ; añadir
-    linm        lnk, 02h    ; obtener inmediato
+    pop         r3
+    pop         r2
+    pop         r1
+    pop         r0
+    pop         lnk
     jmp         lnk         ; saltar al link

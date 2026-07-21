@@ -410,6 +410,8 @@ export function AssembleLineWithoutContext(line, ctx, len=null) {
     if (f3 === 'R5') return 8;
     if (f3 === 'R6') return 9;
     if (f3 === 'LNK')return 10;
+    if (f3 === 'BP') return 11;
+
     return 0;
   }
   function parseSegmentRegister() {
@@ -434,20 +436,32 @@ export function AssembleLineWithoutContext(line, ctx, len=null) {
       expect(')');
       return { t:'i', i:a };
     }
-    return { t:'s', s:parse64bitReg() };
+    let reg = parse64bitReg();
+    if (reg !== 0) {
+      return { t:'s', s:reg };
+    }
+    i--;
+    return {t:'a', a: parseIdent(parsePrimary().value) };
   }
   function parseJmpIfFlag64(flag) {
     consume(); 
     let expr = parse64bitExpr();
-    result.push(
-      1, 0xFF, 0x30 | flag 
-    );
-
-    if (expr.t === 's') {
-      result.push(0 | expr.s);
+    if (expr.t === 'a') {
+      result.push(...AssembleLineWithoutContext(
+        `li64 lnk, ${expr.a} gb ${flag.toString()} lnk`, ctx, len
+      ));
     }
-    else if (expr.t === 'i') {
-      result.push(0x10 | expr.i);
+    else {
+      result.push(
+        1, 0xFF, 0x30 | flag 
+      );
+
+      if (expr.t === 's') {
+        result.push(0 | expr.s);
+      }
+      else if (expr.t === 'i') {
+        result.push(0x10 | expr.i);
+      }
     }
   }
   function parseInmFromMem(sizeof) {
@@ -525,6 +539,13 @@ export function AssembleLineWithoutContext(line, ctx, len=null) {
   function parseCalc() {
     
   }
+  function lvParse(sizeindicator) {
+    consume();
+    let regAddr = consume().value;
+    expect(",");
+    let regDst = consume().value;
+    result.push(...AssembleLineWithoutContext(`ifm${(sizeindicator * 8).toString()} 04h, ${regAddr} linm ${regDst}, 04h`, ctx, len))
+  }
   function loadInmediate64bits(sizeof) {
     consume();
     let register = consume().value;
@@ -594,15 +615,182 @@ export function AssembleLineWithoutContext(line, ctx, len=null) {
       consume(); 
       result.push(1, 0xFF, 0xFF, 0x20 | parse64bitReg());
     }
+
+    else if (ctx.in64 && peek7() === 'CMP') {
+      consume();
+      let a0 = consume().value;
+      expect(",")
+      let a1 = consume().value;
+      expect(",")
+      let a2 = consume().value;
+
+      result.push(...AssembleLineWithoutContext(`sub ${a0}, ${a1}, ${a2} calc ${a0}`, ctx, len));
+    }
+
+    else if (ctx.in64 && peek7() === 'INC') {
+      consume();
+      let a1 = consume().value;
+
+      result.push(...AssembleLineWithoutContext(`add ${a1}, ${a1}, 1`, ctx, len));
+    }
+
+    else if (ctx.in64 && peek7() === 'DEC') {
+      consume();
+      let a1 = consume().value;
+
+      result.push(...AssembleLineWithoutContext(`sub ${a1}, ${a1}, 1`, ctx, len));
+    }
+
+    else if (ctx.in64 && peek7() === 'MOV') {
+      consume();
+      let a1 = consume().value;
+      expect(",")
+      let a2 = consume().value;
+
+      let operationXd = {
+        base: undefined,
+        steps: [],
+        siz: 0
+      };
+      if (a2 == '[') {
+        let siz = parseSize(consume().value);
+        let base = consume().value;
+        operationXd.siz = siz;
+        operationXd.base = base;
+        while (peek().value !== ']') {
+          let operation = consume().value;
+          let dicta = {
+            '+': 'add',
+            '-': 'sub',
+            '*': 'mul',
+            '/': 'div'
+          };
+          operation = dicta[operation];
+          let v3 = parseIdent(parsePrimary().value);
+          operationXd.steps.push({
+            opcode: operation,
+            operand: v3
+          });
+        }
+        expect(']');
+        result.push(...AssembleLineWithoutContext(`mov ${a1}, ${operationXd.base}`, ctx, len));
+
+        operationXd.steps.forEach(v => {
+          result.push(...AssembleLineWithoutContext(`${v.opcode} ${a1}, ${a1}, ${String(v.operand)}`, ctx, len));
+        });
+  
+        result.push(...AssembleLineWithoutContext(`lv${operationXd.siz * 8} ${a1}, ${a1}`, ctx, len));
+
+      }
+
+      else result.push(...AssembleLineWithoutContext(`add ${a1}, ${a2}, 0`, ctx, len));
+    }
+
+    else if (ctx.in64 && peek7() === 'LEA') {
+      consume();
+      let a1 = consume().value;
+      expect(",")
+      expect("[");
+
+      let operationXd = {
+        base: undefined,
+        steps: [],
+        siz: 0
+      };
+      let base = consume().value;
+      operationXd.base = base;
+      while (peek().value !== ']') {
+        let operation = consume().value;
+        let dicta = {
+          '+': 'add',
+          '-': 'sub',
+          '*': 'mul',
+          '/': 'div'
+        };
+        operation = dicta[operation];
+        let v3 = parseIdent(parsePrimary().value);
+        operationXd.steps.push({
+          opcode: operation,
+          operand: v3
+        });
+      }
+      expect(']');
+      result.push(...AssembleLineWithoutContext(`mov ${a1}, ${operationXd.base}`, ctx, len));
+
+      operationXd.steps.forEach(v => {
+        result.push(...AssembleLineWithoutContext(`${v.opcode} ${a1}, ${a1}, ${String(v.operand)}`, ctx, len));
+      });
+    }
+
+    else if (ctx.in64 && peek7() === 'ENTER') {
+      consume();
+      let psize = parseIdent(parsePrimary().value);
+
+      result.push(...AssembleLineWithoutContext(`
+          push bp
+          mov bp, sp
+          add bp, bp, 8
+          add bp, bp, ${psize.toString()}
+          push lnk
+        `, ctx, len));
+    }
+
+    else if (ctx.in64 && peek7() === 'LEAVE') {
+      consume();
+
+      result.push(...AssembleLineWithoutContext(`
+          pop lnk
+          pop bp
+        `, ctx, len));
+    }
+
+    else if (ctx.in64 && peek7() === 'PUSHA') {
+      consume();
+
+      result.push(...AssembleLineWithoutContext(`
+          push r0
+          push r1
+          push r2
+          push r3
+          push r4
+          push r5
+          push r6
+        `, ctx, len));
+    }
+
+    else if (ctx.in64 && peek7() === 'POPA') {
+      consume();
+
+      result.push(...AssembleLineWithoutContext(`
+          pop r6
+          pop r5
+          pop r4
+          pop r3
+          pop r2
+          pop r1
+          pop r0
+        `, ctx, len));
+    }
+
     else if (ctx.in64 && peek7() === 'MWR8')  parseMemWrite(1);
     else if (ctx.in64 && peek7() === 'MWR16') parseMemWrite(2);
     else if (ctx.in64 && peek7() === 'MWR32') parseMemWrite(4);
     else if (ctx.in64 && peek7() === 'MWR64') parseMemWrite(8);
     
+    else if (ctx.in64 && peek7() === 'LV8') lvParse(1);
+    else if (ctx.in64 && peek7() === 'LV16') lvParse(2);
+    else if (ctx.in64 && peek7() === 'LV32') lvParse(4);
+    else if (ctx.in64 && peek7() === 'LV64') lvParse(8);
+
     else if (ctx.in64 && peek7() === 'IFM8')  parseInmFromMem(1);
     else if (ctx.in64 && peek7() === 'IFM16') parseInmFromMem(2);
     else if (ctx.in64 && peek7() === 'IFM32') parseInmFromMem(4);
     else if (ctx.in64 && peek7() === 'IFM64') parseInmFromMem(8);
+
+    else if (ctx.in64 && peek7() === 'RET') {
+      consume();
+      result.push(...AssembleLineWithoutContext(`jmp lnk`, ctx, len));
+    }
 
     else if (ctx.in64 && peek7() === 'ADD')   parse64bitOperation(0);
     else if (ctx.in64 && peek7() === 'SUB')   parse64bitOperation(1);
@@ -623,10 +811,24 @@ export function AssembleLineWithoutContext(line, ctx, len=null) {
     else if (ctx.in64 && peek7() === 'JITRUE')parseJmpIfFlag64(3);
     else if (ctx.in64 && peek7() === 'JMP')   parseJmpIfFlag64(3);
     else if (ctx.in64 && peek7() === 'BL')    parseJmpIfFlag64(4);
+    else if (ctx.in64 && peek7() === 'GB')    { 
+      consume();
+      let flag = peek().value;
+      parseJmpIfFlag64(flag);
+    }
 
     else if (ctx.in64 && peek7() === 'PUSH') {
       consume();
-      result.push(...AssembleLineWithoutContext(`sub sp, sp, 8 mwr64 sp, ${consume().value}`, ctx, len));
+      let valpush = consume().value;
+      result.push(...AssembleLineWithoutContext(`sub sp, sp, 8`, ctx, len));
+
+      if (typeof valpush === 'number')
+      {
+        result.push(...AssembleLineWithoutContext(`mov r6, ${valpush.toString()} mwr64 sp, r6`, ctx, len));
+      }
+      else { 
+        result.push(...AssembleLineWithoutContext(`mwr64 sp, ${valpush}`, ctx, len));
+      }
     }
     else if (ctx.in64 && peek7() === 'POP') {
       consume();
@@ -861,6 +1063,11 @@ export function AssembleLineWithoutContext(line, ctx, len=null) {
           result.push(parseSymbol(expr.value))
         }
       }
+    }
+    else if (peek7() === 'RESERVE') {
+      consume();
+      let a = consume().value;
+      result.push(...Array(a).fill(0))
     }
     else if (!ctx.in64 && peek7() === "JZ") parseJmpType(1);
     else if (!ctx.in64 && peek7() === "JL") parseJmpType(2);

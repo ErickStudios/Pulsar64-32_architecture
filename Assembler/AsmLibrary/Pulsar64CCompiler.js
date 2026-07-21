@@ -1,108 +1,4 @@
-export class BaseTypeConstructor {
-    constructor() { }
-    construct() { throw new TypeError("the base type has not constructor") }
-    calculeSize() { return 0; }
-}
-export class BaseTypeInstance {
-    constructor(typeClassName) { this.cls = typeClassName; }
-}
-export class ArrayTypeConstructor
-extends BaseTypeConstructor {
-    constructor(typeBase, elementsCount) {
-        super();
-        if (!(typeBase instanceof BaseTypeConstructor)) 
-            throw new TypeError('Invalid type base for array');
-        if (typeof elementsCount !== 'number')
-            throw new TypeError('Invalid length for array');
-
-        this.typeBase = typeBase;
-        this.elementsCount = elementsCount;
-    }
-    calculeSize() {
-        return this.typeBase.calculeSize() * this.elementsCount;
-    }
-    construct() {
-        return new ArrayTypeInstance(this);
-    }
-}
-export class NativeType 
-extends BaseTypeConstructor {
-    constructor(sizeof) {
-        super();
-        this.size = sizeof;
-    }
-    calculeSize() {
-        return this.size;
-    }
-    construct() {
-        return new NativeTypeInstance(this);
-    }
-};
-export class StructureType 
-extends BaseTypeConstructor {
-    constructor() {
-        super();
-        /** @type { {name:string, field:BaseTypeConstructor}[] } */
-        this.fields = [];
-    }
-    appendField(name, field) {
-        if (!(field instanceof BaseTypeConstructor))
-            throw new Error("Unrreconocible type base");
-        
-        this.fields.push({name, field});
-    }
-    calculeSize() {
-        let size = 0;
-        this.fields.forEach(v => {
-            size += v.field.calculeSize();
-        });
-        return size;
-    }
-    construct() {
-        return new StructuredTypeInstance(this);
-    }
-};
-export class ArrayTypeInstance
-extends BaseTypeInstance {
-    constructor(aParent) {
-        if (!(aParent instanceof ArrayTypeConstructor)) 
-            throw new TypeError("Invalid constructor for a array");
-
-        super('array');
-
-        this.elementsCount = aParent.elementsCount;
-        this.typeBase = aParent.typeBase;
-    }
-};
-export class StructuredTypeInstance 
-extends BaseTypeInstance {
-    constructor(sParent) {
-        if (!(sParent instanceof StructureType)) 
-            throw new TypeError("Invalid constructor for a struct");
-
-        super('structured');
-
-        this.size = sParent.calculeSize();
-        /** @type {{name: string, field: BaseTypeInstance}[]} */
-        this.fields = [];
-
-        for (/** @type {{name: string, field: BaseTypeConstructor;}}*/const field of sParent.fields) {
-            this.fields.push({name: field.name, field: field.field.construct()});
-        }
-    }
-};
-export class NativeTypeInstance 
-extends BaseTypeInstance {
-    constructor(tParent) {
-        if (!(tParent instanceof NativeType)) 
-            throw new TypeError();
-
-        super('native');
-        this.size = tParent.calculeSize();
-    }
-};
-
-function tokenize(code) {
+export function tokenize(code) {
   const tokens = [];
   let i = 0;
   const isLetter = (c) => /[a-zA-Z_]/.test(c);
@@ -119,6 +15,12 @@ function tokenize(code) {
       }
       continue;
     }
+    if (c === '-' && code[i + 1] === '>') {
+        i+=2;
+        tokens.push({ type: "arrow", value: '->' });
+
+        continue;
+    }
     if (c === "'") {
       let quoteType = c;
       let value = "";
@@ -129,6 +31,17 @@ function tokenize(code) {
       i++;
       tokens.push({ type: "number", value: value.charCodeAt(0) });
       continue;
+    }
+    if (c === '"' || c === "'") {
+        let quoteType = c;
+        let value = "";
+        i++;
+        while (i < code.length && code[i] !== quoteType) {
+            value += code[i++];
+        }
+        i++;
+        tokens.push({ type: "string", value });
+        continue;
     }
     if (isLetter(c)) {
       let value = "";
@@ -177,21 +90,51 @@ function tokenize(code) {
 
         continue;
     }
+    if (c === '=' && code[i + 1] === '=') {
+        i+=2;
+        tokens.push({ type: "symbol", value: '==' });
+        continue;
+    }
+    if (c === '!' && code[i + 1] === '=') {
+        i+=2;
+        tokens.push({ type: "symbol", value: '!=' });
+        continue;
+    }
+    if (c === '<' && code[i + 1] === '<') {
+        i+=2;
+        tokens.push({ type: "symbol", value: '<<' });
+        continue;
+    }
+    if (c === '>' && code[i + 1] === '>') {
+        i+=2;
+        tokens.push({ type: "symbol", value: '>>' });
+        continue;
+    }
     tokens.push({ type: "symbol", value: c });
     i++;
   }
   return tokens;
 }
+
+export class IrInstruction {
+    constructor(name, ps) {
+        this.name = name;
+        this.ps = ps;
+    }
+    getType() {
+        return this.name;
+    }
+    toString() {
+        return this.name + " " + this.ps.join(",");
+    }
+}
+
 /** @param {{type: string;value: number | string;}[]} tokens  */
 export function parse(tokens) {
     let i = 0;
-
-    let typesBuiltin = {
-        'char': new NativeType(1),
-        'short': new NativeType(2),
-        'int': new NativeType(4),
-        'long': new NativeType(8)
-    };
+    let functions = {};
+    let variables = {};
+    let structs = {};
 
     function peek() {
         return tokens[i];
@@ -207,359 +150,758 @@ export function parse(tokens) {
         throw new Error("Expected " + value);
         }
     }
+    function isFunction() {
+        let save = i;
 
-    /** @returns { BaseTypeConstructor } */
-    function valideType(name, launchEx=true) {
-        if (name in typesBuiltin) {
-            let typa = typesBuiltin[name];
-            if (!(typa instanceof BaseTypeConstructor)) {
-                throw new TypeError("Invalid type constructor");
-            }
-            return typesBuiltin[name];
+        if (!isType(peek().value)) {
+            return false;
         }
 
-        if (launchEx) throw new TypeError("Unknown type");
-        return null;
-    }
+        consume(); // tipo
 
-    function parseVarDecl() {
-        let abc = consume().value;
-        let typea = valideType(abc, false);
-        if (typea === null) {
-            return parseIdentifier(abc);
+        if (peek().type !== "identifier") {
+            i = save;
+            return false;
         }
-        else {
-            let name = consume().value;
-            if (peek().value === '(') {
-                consume();
-                expect(')');
-                expect('{');
-                let body = [];
-                while (peek() && peek().value != '}') {
-                    let adda = parseStatment();
 
-                    if (adda) body.push(adda);
-                }
-                expect("}");
-                return { type: 'FunctionDecl', name: name, body }
-            }
-            else {
-
-            let heIsHaveToBeAArray = false;
-            let ArrayElementsList = 0;
-
-            if (peek().value === '[') {
-                consume();
-                heIsHaveToBeAArray = true;
-                ArrayElementsList = consume().value;
-                typea = new ArrayTypeConstructor(typea, ArrayElementsList);
-                expect("]");
-            }
-
-            expect(';');
-
-            let instanced = typea.construct();
-
-            return {type: 'InstanceVariable', name, instanced}; }
-        }
-    }
-
-    function parseStructDefinition() {
         consume();
-        let name = "_unnamed";
 
-        if (peek().value !== "{")
-            name = consume().value;
+        let result = peek().value === "(";
+
+        i = save;
+        return result;
+    }
+    function parseFunction() {
+
+        let returnType = consume().value;
+        let name = consume().value;
+
+        expect("(");
+
+        let params = [];
+
+        while (peek().value !== ")") {
+
+            if (peek().value === 'struct') consume();
+
+            let type = consume().value;
+
+            let pointer = false;
+            if (peek().value === "*") {
+                consume();
+                pointer = true;
+            }
+
+            let param = consume().value;
+
+            params.push({
+                name: param,
+                type,
+                pointer
+            });
+
+            if (peek().value === ",")
+                consume();
+        }
+
+        expect(")");
 
         expect("{");
 
-        let st = new StructureType();
+        let ssa = Symbol(0);
+        let offset = 0;
+
+        for (const p of params) {
+            variables[p.name] = {
+                type: p.type,
+                pointer: p.pointer,
+                parameter: true,
+                offset,
+                pp: ssa
+            };
+
+            offset += 8;
+        }
+
+        let body = [];
+
+        while (peek().value !== "}") {
+            body.push(...inCodeSpace());
+        }
+
+        expect("}");
+
+        Object.keys(variables)
+            .filter(a => variables[a].pp === ssa)
+            .forEach(a => delete variables[a]);
+
+        let fn = {
+            type: "Function",
+            name,
+            returnType,
+            params,
+            body,
+            sas: offset
+        };
+
+        functions[name] = fn;
+
+        return new IrInstruction("Function", [fn]);
+    }
+    function loadPointer() {
+        return new IrInstruction('Desreference', []);
+    }
+    function loadValue(name) {
+        let v = variables[name];
+
+        if (v?.parameter)
+            return new IrInstruction("LoadParameter", [v.offset, getTypeSize(v.type)]);
+
+        return new IrInstruction("LoadValue", [name]);
+    }
+    function loadField(offset) {
+        return new IrInstruction('Field', [offset])
+    }
+    function getSize(field) {
+
+        if (field.pointer)
+            return 8;
+
+
+        if (field.type === "long")
+            return 8;
+        if (field.type === "int")
+            return 4;
+        if (field.type === "short")
+            return 2;
+        if (field.type === "char")
+            return 1;
+        if (field.type === "bool")
+            return 1;
+
+        return structs[field.type]?.size ?? 0;
+    }
+    function calcStructSize(fields) {
+        let size = 0;
+
+        for (const field of fields) {
+            size += getSize(field);
+        }
+
+        return size;
+    }
+    function isType(name) {
+        return (
+            name === "long" ||
+            name === "int" ||
+            name === "short" ||
+            name === "char" ||
+            name === "bool" ||
+
+            structs[name]
+        );
+    }
+    function variableReference() {
+
+        let ir = [];
+        let deref = false;
+
+        if (peek().value === "*") {
+            consume();
+            deref = true;
+        }
+
+
+        let name = consume().value;
+
+        let variable = variables[name];
+
+        let currentType = variable.type;
+
+        let ab = loadValue(name);
+    
+        let msr = false;
+        if (ab.getType() == 'LoadParameter') {
+            msr = true;
+        }
+
+        ir.push(ab);
+
+        if (deref) {
+            ir.push(loadPointer());
+        }
+
+        let levelo = 0;
+        while (peek() &&
+            (peek().value === "." ||
+            peek().value === "->")) {
+
+            let op = consume().value;
+            let field = consume().value;
+
+            if (op === "->") {
+                if (levelo == 0 && msr) {
+
+                }
+                else ir.push(loadPointer());
+            }
+
+            levelo++;
+
+            let offset = getFieldOffset(
+                currentType,
+                field
+            );
+
+            ir.push(loadField(offset));
+
+
+            let fieldInfo =
+                structs[currentType]
+                .fields
+                .find(f => f.name === field);
+
+
+            currentType = fieldInfo.type;
+        }
+
+        let pointer = variable.pointer;
+
+        if (deref) {
+            if (!pointer)
+                throw new Error("Cannot dereference non-pointer");
+
+            pointer = false;
+        }
+
+        return {
+            ir,
+            type: currentType,
+            pointer: pointer,
+            deref,
+            msr
+        };
+    }
+    function parseVariableDecl(addFile=true) {
+        let type = consume().value;
+
+        let pointer = false;
+
+        if (peek().value === '*') {
+            consume();
+            pointer = true;
+        }
+
+        let name = consume().value;
+
+        expect(";");
+
+        variables[name] = {
+            type,
+            pointer
+        };
+
+        if (addFile) {
+            return new IrInstruction(
+                "Declare",
+                [
+                    name,
+                    type,
+                    pointer ? 8 : getTypeSize(type),
+                    8
+                ]
+            );
+        }
+    }
+    function getFieldOffset(structName, fieldName) {
+
+        let st = structs[structName];
+
+        let offset = 0;
+
+        for (let f of st.fields) {
+            if (f.name === fieldName)
+                return offset;
+
+            offset += getSize(f);
+        }
+
+        throw new Error("field not found");
+    }
+
+    function parseSymbol() {
+
+        if (peek().value === "&") {
+            consume();
+
+            let ref = variableReference();
+
+            return {
+                ir: ref.ir,
+                type: ref.type,
+                pointer: true
+            };
+        }
+
+        if (peek().type === 'number') {
+            return {
+                ir:[
+                    new IrInstruction(
+                        'LoadFlat',
+                        [consume().value]
+                    )
+                ],
+                type:'long',
+                pointer:false
+            };
+        }
+
+        let a = variableReference();
+        if (!a.msr) 
+        a.ir.push(
+            new IrInstruction(
+                'Get',
+                [
+                    a.pointer ? 8 : getTypeSize(a.type)
+                ]
+            )
+        );
+
+        return a;
+    }
+
+    function newLabel(name) {
+        return name + "_" + Math.floor(Math.random()*10000);
+    }
+
+    function getTypeSize(type) {
+
+        if (type === "long")
+            return 8;
+
+        if (type === "int")
+            return 4;
+
+        if (type === "short")
+            return 2;
+
+        if (type === "char")
+            return 1;
+
+
+        return structs[type]?.size ?? 0;
+    }
+    function parseCall() {
+
+        let name = consume().value;
+
+        expect("(");
+
+        let args = [];
+
+        while (peek().value !== ")") {
+
+            let arg = parseSymbol();
+
+            args.push(arg);
+
+            if (peek().value === ",")
+                consume();
+        }
+
+        expect(")");
+
+        expect(";");
+
+
+        return [
+            new IrInstruction(
+                "Call",
+                [
+                    name,
+                    args
+                ]
+            )
+        ];
+    }
+    function inCodeSpace() {
+        if (peek().value === "while") {
+            return parseWhile();
+        }
+
+        if (
+            peek().type === "identifier" &&
+            tokens[i + 1]?.value === "("
+        ) {
+            return parseCall();
+        }
+        
+        let boda = [new IrInstruction('ChgPrimRe', [])];
+        let ab = variableReference();
+        boda.push(...ab.ir);
+        if (peek().value == '=') {
+            consume();
+            boda.push(new IrInstruction('ChgSecRe', []));
+            let s = parseSymbol();
+            boda.push(...s.ir);
+            let modifier = "";
+            let symbols = {
+                '+': 'Add',
+                '-': 'Sub',
+                '*': 'Mul',
+                '/': 'Div',
+                '<<': 'Shl',
+                '>>': 'Shr',
+                '&' : 'And'
+            }
+            if (peek().value !== ';') {
+                if (peek().value in symbols) {
+                    modifier = symbols[consume().value];
+                }
+            }
+            if (modifier !== '') {
+                let d = parseSymbol();
+                boda.push(new IrInstruction('ChgTerRe', []));
+                boda.push(...d.ir);
+                boda.push(new IrInstruction(`${modifier}`));
+            }
+            boda.push(new IrInstruction(`Store`, [
+                ab.pointer ? 8 : getTypeSize(ab.type),
+                s.pointer ? 8 : getTypeSize(s.type)
+            ]));
+
+        }
+        expect(";");
+        return boda;
+    }
+    function parseCondition(){
+
+        let ada = [];
+        
+        ada.push(new IrInstruction('ChgPrimRe', []));
+        let left = parseSymbol();
+        ada.push(...left.ir);
+
+        let op = consume().value;
+
+        ada.push(new IrInstruction('ChgSecRe', []));
+        let right = parseSymbol();
+        ada.push(...right.ir);
+
+        ada.push(new IrInstruction("Compare",[op]))
+
+        return {
+            ir:ada
+        };
+    }
+    function parseWhile(){
+
+        expect("while");
+        expect("(");
+
+        let condition = parseCondition();
+
+        expect(")");
+        expect("{");
+
+        let body=[];
+
+        while(peek().value !== "}") {
+            body.push(...inCodeSpace());
+        }
+
+        expect("}");
+
+
+        let start = newLabel("while");
+        let end = newLabel("end");
+
+
+        return [
+            new IrInstruction(
+                "Label",
+                [start]
+            ),
+
+            ...condition.ir,
+
+            new IrInstruction(
+                "JumpFalse",
+                [end]
+            ),
+
+            ...body,
+
+            new IrInstruction(
+                "Jump",
+                [start]
+            ),
+
+            new IrInstruction(
+                "Label",
+                [end]
+            )
+        ];
+    }
+    function inDataSpace() {
+        if (isFunction()) {return [parseFunction()];}
+        if (peek().value === 'extern') {
+            consume();
+            parseVariableDecl(false);
+            return [];
+        }
+        if (peek().value === 'struct') {
+            let ac = parseStruct();
+            if (ac) 
+                return [new IrInstruction('CrtStruct', [ac])];
+            else {
+                i--;
+                return inDataSpace();
+            }
+        }
+        if (peek().type === "identifier" &&
+        isType(peek().value)) {
+            return [
+                parseVariableDecl()
+            ];
+        }
+    }
+
+    function parseStruct() {
+        expect("struct");
+
+        const name = consume().value;
+
+        if (peek().value !== '{') return null;
+        expect("{");
+
+        const fields = [];
 
         while (peek().value !== "}") {
 
-            let typeName = consume().value;
-            let fieldName = consume().value;
-            let arrayItem = null;
+            if (peek().value === 'struct') consume();
 
-            if (peek().value == '[') {
+            let type = consume().value;
+
+            let pointer = false;
+
+            if (peek().value === "*") {
                 consume();
-                arrayItem = consume().value;
-                expect(']');
+                pointer = true;
             }
 
-            let tata;
-            
-            if (arrayItem !== null) {
-                tata = new ArrayTypeConstructor(valideType(typeName), arrayItem);
-            } else tata = valideType(typeName);
-
-            st.appendField(
-                fieldName,
-                tata
-            );
+            let field = consume().value;
 
             expect(";");
+
+            fields.push({
+                name: field,
+                type,
+                pointer
+            });
         }
 
         expect("}");
         expect(";");
 
-        typesBuiltin[name] = st;
 
-        return {type: 'StructureDefinition', st};
+        let result = {
+            type: "Struct",
+            name,
+            fields,
+            size: calcStructSize(fields)
+        };
+
+        structs[name] = result;
+
+        return result;
     }
 
-    function parseFieldEnter(main) {
-        let fields = [];
-        while (peek() && peek().value === '.') {
-            consume();
-            let field = consume().value;
-            if (peek().value == '[') {
-                consume();
-                let arrite = parseSyntaxDot();
-                if (arrite.type === 'InmediateGet') {
-                    fields.push(field + "_item" + arrite.value);
-                }
-                else if (arrite.type === 'NonInmediateGet') {
-                    fields.push({type: 'FromIndirect', field, varuse: arrite.addr});
-                }
-                expect("]");
+    function parseProgram() {
+        let ir = [];
+
+        while (peek()) {
+
+            let pk = inDataSpace();
+            if (!pk) {
+                pk = inCodeSpace();
             }
-            else fields.push(field);
-        }
-        return {type: 'FieldAccess', obj: main, fields};
-    }
 
-    function parseIdentifier(identa) {
-        if (peek().value === '.') {
-            return parseFieldEnter(identa);
+            if (!pk) pk = [];
+
+            ir.push(...pk);
         }
 
-        return {type: 'VariableUse', name: identa};
+        return ir;
     }
 
-    function parseSyntaxDot() {
-        let abc = consume().value;
-        if (typeof abc !== 'number') {
-            return { type: 'NonInmediateGet', addr: parseIdentifier(abc) };
-        } else {
-            return { type: 'InmediateGet', value: abc };
-        }
-    }
-
-    function parseSentence() {
-        let ene = parseVarDecl();
-
-        // empezara la cosa seria
-        if (ene.type === 'VariableUse' || ene.type === 'FieldAccess') {
-            // asignacion
-            if (peek().value === '=') {
-                consume();
-                let b = parseSyntaxDot();
-                expect(";");
-                return { type: 'Assignation', dest: ene, src: b };
-            }
-        }
-
-        return ene;
-    }
-
-    let body = [];
-
-    function parseStatment() {
-        let token = typeof peek().value === 'string' ? 
-                    peek().value : 
-                    (() => {
-                        throw new TypeError("invalid keyword");
-                    })();
-        if (token === 'struct') return parseStructDefinition();
-        else { 
-            return parseSentence();
-        }
-    }
-
-    while (i < tokens.length) {
-        let adda = parseStatment();
-
-        if (adda) body.push(adda);
-    }
-
-    return body;
+    return parseProgram();
 }
-export function codeGen(parsed) {
-    let mappedSizes = {
+/** @param {IrInstruction[]} pparsed  */
+export function codeGen(pparsed) {
+    let secondary = 0;
+    function mainReg() {
+        return `r${secondary}`
+    }
+    let xas = {
         1: 'byte',
         2: 'word',
         4: 'dword',
         8: 'qword'
     }
-    let dictSymbols = {};
-    function genNativeType(t) {
-        if (t instanceof NativeTypeInstance) {
-            return ' ' + mappedSizes[t.size] + ' 0' + "\n";
+    /** @param {IrInstruction} p  */
+    function genB(p) {
+        if (p.getType() === 'ChgPrimRe') {
+            secondary = 0;
         }
-
-        throw new TypeError("Invalid type");
-    }
-    function genStructure(t, name) {
-        if (t instanceof StructuredTypeInstance) {
-            let codega = name + ': ; structured instance\n';
-            t.fields.forEach(v => {
-                codega += genAuto(v.field, name + '_' + v.name);
-            })
-
-            return codega;
+        else if (p.getType() === 'ChgSecRe') {
+            secondary = 1;
         }
-
-        throw new TypeError("Invalid type");
-    }
-    function genAuto(t, name) {
-        if (t instanceof ArrayTypeInstance) {
-            return genArray(t, name);
+        else if (p.getType() === 'ChgTerRe') {
+            secondary = 2;
         }
-        if (t instanceof StructuredTypeInstance) {
-            return genStructure(t, name);
+        else if (p.getType() === 'LoadValue') {
+            return `li64 ${mainReg()}, ${String(p.ps[0])}`;
         }
-        if (t instanceof NativeTypeInstance) {
-            dictSymbols[name] = t.size * 8;
-            return name + ":" + genNativeType(t);
+        else if (p.getType() === 'Field') {
+            if (p.ps[0] !== 0)
+                return `add ${mainReg()}, ${mainReg()}, ${String(p.ps[0])}`;
+            
+            return "";
         }
-
-        return "";
-    }
-    function genArray(t, name) {
-        if (t instanceof ArrayTypeInstance) {
-            let codega = name + ': ; array instance ' + t.elementsCount + ' items\n';
-            for (let index = 0; index < t.elementsCount; index++) {
-                codega += genAuto((t.typeBase.construct()), name + "_item" + String(index));
-            }
-
-            return codega;
+        else if (p.getType() === 'Desreference') {
+            return `mov ${mainReg()}, [qword ${mainReg()}]`;
         }
-
-        throw new TypeError("Invalid type");
-    }
-
-    function registerRecallSyntaxPrev(sint, offSize, calca) {
-        if (sint.type === 'FieldAccess' || sint.type === 'VariableUse') {
-            let ana = serializeAccessPoint(sint);
-            return `   ; access direction index
-   li64 r0, ${ana}
-   ifm${dictSymbols[ana]} 04h, r0
-   linm r0, 04h
-   li64 r5, ${calca}
-   ; calculate absolute direction with offset
-   mul r0, r0, ${offSize}
-   add r0, r5, r0
-`;
-        } else {
-            return `   li64 r0, ${calca}_item${sint.value}`;
+        else if (p.getType() === 'Store') {
+            return `mwr${String(p.ps[0] * 8)} r0, r1`;
         }
-    }
-
-    function serializeAccessPoint(ina) {
-        if (ina.type === 'FieldAccess') {
-            let coda = ina.obj + "_";
-            for (let index = 0; index < ina.fields.length; index++) {
-                const element = ina.fields[index];
-                console.log(element);
-                coda += typeof element === 'string' ? element : element.field;
-                if (index < (ina.fields.lengt - 1)) {
-                    coda += "_"
-                }
-            }
-            return coda;
+        else if (p.getType() === 'Add') {
+            return `add r1, r1, r2`;
         }
+        else if (p.getType() === 'Sub') {
+            return `sub r1, r1, r2`;
+        }
+        else if (p.getType() === 'Div') {
+            return `div r1, r1, r2`;
+        }
+        else if (p.getType() === 'Mul') {
+            return `mul r1, r1, r2`;
+        }
+        else if (p.getType() === 'Shl') {
+            return `shl r1, r1, r2`;
+        }
+        else if (p.getType() === 'Shr') {
+            return `shr r1, r1, r2`;
+        }
+        else if (p.getType() === 'And') {
+            return `and r1, r1, r2`;
+        }
+        else if (p.getType() === 'LoadFlat') {
+            return `li64 ${mainReg()}, ${String(p.ps[0])}`;
+        }
+        else if (p.getType() === 'Get') {
+            return `lv${String(p.ps[0] * 8)} ${mainReg()}, ${mainReg()}`
+        }
+        else if (p.getType() === 'Declare') {
+            return `${p.ps[0]}: reserve ${p.ps[2]}`;
+        }
+        else if (p.getType() === 'LoadParameter') {
+            return `mov ${mainReg()}, [qword bp-${p.ps[0]}]`;
+            // ${xas[p.ps[1]]}
+        }
+        else if(p.getType()==="Label"){
+            return p.ps[0]+":";
+        }
+        else if(p.getType()==="Jump"){
+            return `jmp ${p.ps[0]}`;
+        }
+        else if(p.getType()==="JumpTrue"){
+            return `jifeq ${p.ps[0]}`;
+        }
+        else if(p.getType()==="JumpFalse"){
+            return `cmp r2, r2, 0 jifeq ${p.ps[0]}`;
+        }
+        else if (p.getType() === 'Compare') {
+            return `cmp r2, r0, r1`
+        }
+        else if (p.getType() === "Call") {
 
-        return ina.name;
-    }
+            let name = p.ps[0];
+            let args = p.ps[1];
 
-    function hasIndirectAccess(fieldAccess) {
-        return fieldAccess.fields.some(f =>
-            typeof f !== "string" &&
-            f.type === "FromIndirect"
-        );
-    }
+            let out = [];
 
-    function parseAGroup(list) {
-        let codega = "";
-        list.forEach(v => {
-            if (v.type === 'InstanceVariable') {
-                codega += genAuto(v.instanced, v.name);
-            }
-            else if (v.type === 'FunctionDecl') {
-                codega += v.name + ":\n" + parseAGroup(v.body);
-            }
-            else if (v.type === 'Assignation') {
-                let destName = serializeAccessPoint(v.dest);
-                let source   = v.src;
+            let argn = 0;
 
-                if (source.type === 'InmediateGet') {
-                    codega += `   ; get inm from code raw\n   li64 r1, ${source.value}\n`;
-                }
-                else if (source.type === 'NonInmediateGet') {
-                    let srcName = serializeAccessPoint(source.addr);
-                    codega += `   ; get variable value\n   li64 r0, ${srcName}\n   ifm${dictSymbols[srcName]} 04h, r0\n   linm r1, 04h\n`;
+            for (let arg of args) {
+
+                for (let ins of arg.ir) {
+                    out.push((argn !== 0 ? `   ` : "") + genA(ins));
+                    argn++;
                 }
 
-if (v.dest.type === "FieldAccess" && hasIndirectAccess(v.dest)) {
+                out.push(
+                    `   push ${mainReg()}`
+                );
 
-    let indirect = v.dest.fields.find(f =>
-        typeof f !== "string"
-    );
+                argn++;
+            }
 
-    codega += registerRecallSyntaxPrev(
-        indirect.varuse, // i
-        1,               // sizeof(char)
-        "b_name"         // base del array
-    );
+            out.push(
+                (argn !== 0 ? `   ` : "") + `bl ${name}`
+            );
 
-    codega += "   ; write variable\n   mwr8 r0, r1\n";
+            out.push(
+                `   add sp, sp, ${args.length*8}`
+            )
+
+            return out.filter(x => x.trim() !== "").join("\n");
+        }
+        else if (p.getType() === "Function") {
+            let fn = p.ps[0];
+
+            let out = [];
+
+            out.push(`${fn.name}:`);
+            let v = ((fn.sas/8)-1)*8;
+            if (!(v >= 0)) v = 0;
+            out.push(`   enter ${v}`);
+
+            for (let ins of fn.body) {
+                out.push((ins.getType() !== 'Label' ? "   " : "") + genA(ins));
+            }
+
+            out.push("   leave");
+            out.push("   ret");
+
+            return out.filter(x => x.trim() !== "").join("\n");
+        }
+        return '';
+    }
+    function genA(p) {
+        return genB(p) //+ "; " + p.getType();
+    }
+
+    return pparsed.map(genA).filter(x => x.trim() !== "").join("\n");
 }
-else {
-    let destName = serializeAccessPoint(v.dest);
-
-    codega += `   ; write variable
-   li64 r0, ${destName}
-   mwr${dictSymbols[destName]} r0, r1
-`;
-}
-            }
-            else { 
-                serializeAccessPoint(v); 
-            }
-
-        });
-
-        return codega;
+/*
+let abc = pparse(tokenize(`
+    struct tc {
+        long w;
     };
-
-    return parseAGroup(parsed);
-}
-/*let xd = tokenize(`
-struct tableElement {
-    long identifier;
-    long index;
-    char name[12];
-};
-tableElement b;
-int i;
-int _start() {
-    i = 10;
-    b.name[i] = b.name[1];
-}
-`);
-//console.log(xd)
-
-let a = parse(xd);
-
-/**
-b:
-b_xd:
-b_xd_identifier:
-    qword 0
-b_xd_index:
-    qword 0
-
-
-console.log(codeGen(a));*/
+    struct tb {
+        long a;
+        int b;
+        struct tc z;
+    };
+    struct ta {
+        struct tc aa;
+        struct tb za;
+        struct tb* y;
+        struct tc a;
+    };
+    struct ta x;
+    x.y->z.w = x.a;
+    `));
+console.log(codeGen(abc));
+*/

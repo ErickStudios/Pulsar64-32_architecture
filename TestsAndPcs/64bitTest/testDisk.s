@@ -2,8 +2,7 @@
     s1          equ 8200h
     s1dot5      equ 4200h
     s2          equ 9000h
-    li16        r1, (start + s1)
-    jmp         r1
+    jmp         (start + s1)
 
     Align       20h
     dw          (end / 512) ; cantidad de sectores
@@ -61,11 +60,10 @@ buildroot:
     align   512
 init:
     hlt
-    li64        lnk, readDisk
     li64        r0, 0       ; fs 
     li64        r1, 0       ; sector
     li64        r2, 8200h   ; direccion donde escribira
-    int         13h         ; funcion para lanzar funciones desde el anillo 0
+    int         14h         ; funcion para lanzar funciones desde el anillo 0
     Align       1024
 
 endinit:
