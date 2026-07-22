@@ -1,5 +1,5 @@
     org64
-    s1          equ 8200h
+    s1          equ 8D00h
     s1dot5      equ 4200h
     s2          equ 9000h
     jmp         (start + s1)

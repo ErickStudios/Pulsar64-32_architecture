@@ -1,43 +1,43 @@
 // Variables used for hings
 extern char* __uart;
 extern char* __vend;
+extern char* BootSectorLoader;
+extern char* UartAddr;
+
+// Include I/O functions for use
+extern char outPort(long port, char data);
+extern char inPort(long port, char* data);
+
+// Include Disk Functions
+extern char readDisk(char* buffer, long lba);
+
+// Debug Console Functions
+extern char putc(char ch);
+extern char puts(char* str);
+
+// Include Screen Functions
+extern char initdisplay();
 
 // EBoot Functions Structure
 struct EBootPayloadTable {
     char* vendorPtr;
 };
 
-// Addr Of Uart
-char* UartAddr;
-
 // The Original Table
 struct EBootPayloadTable Table;
 
-char xa;
-
+long entryBoot;
 // The Main Function
 char main() {
     Table.vendorPtr = __vend;
     UartAddr = __uart;
+    
+    initdisplay();
     puts(__vend);
-    halt();
-}
+    readDisk(BootSectorLoader, 0);
 
-// Character Put
-char putc(char x) {
-    *UartAddr = x;
-}
-
-// String Put
-char putstmp1;
-char* putstmp2;
-char puts(char* msg) {
-    putstmp2 = msg;
-    while (*putstmp2 != 0) {
-        putstmp1 = *putstmp2;
-        putc(putstmp1);
-        putstmp2 = putstmp2 + 1;
-    }
+    entryBoot = BootSectorLoader;
+    __asm__ ("li64 lnk, entryBoot lv64 lnk, lnk bl lnk");
 }
 
 // codigo suelto inacesible

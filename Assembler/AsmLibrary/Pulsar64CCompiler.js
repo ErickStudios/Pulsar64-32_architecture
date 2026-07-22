@@ -21,6 +21,25 @@ export function tokenize(code) {
 
         continue;
     }
+    if (c === "0" && (code[i + 1] === "x" || code[i + 1] === "X")) {
+        i += 2;
+
+        let value = "";
+
+        while (
+            i < code.length &&
+            (isNumber(code[i]) || "ABCDEFabcdef".includes(code[i]))
+        ) {
+            value += code[i++];
+        }
+
+        tokens.push({
+            type: "number",
+            value: parseInt(value, 16)
+        });
+
+        continue;
+    }
     if (c === "'") {
       let quoteType = c;
       let value = "";
@@ -171,10 +190,14 @@ export function parse(tokens) {
         i = save;
         return result;
     }
-    function parseFunction() {
-
-        let returnType = consume().value;
-        let name = consume().value;
+    function parseFunction(saveBody=true, nameV='xd', retiv='char') {
+    
+        let returnType = retiv;
+        let name = nameV
+        if (saveBody) {
+            returnType = consume().value;
+            name = consume().value;
+        }
 
         expect("(");
 
@@ -205,9 +228,6 @@ export function parse(tokens) {
         }
 
         expect(")");
-
-        expect("{");
-
         let ssa = Symbol(0);
         let offset = 0;
 
@@ -222,14 +242,17 @@ export function parse(tokens) {
 
             offset += 8;
         }
-
         let body = [];
+        if (saveBody) {
+            expect("{");
 
-        while (peek().value !== "}") {
-            body.push(...inCodeSpace());
+            while (peek().value !== "}") {
+                body.push(...inCodeSpace());
+            }
+
+            expect("}");
+
         }
-
-        expect("}");
 
         Object.keys(variables)
             .filter(a => variables[a].pp === ssa)
@@ -237,14 +260,14 @@ export function parse(tokens) {
 
         let fn = {
             type: "Function",
-            name,
-            returnType,
+            name : saveBody ? name : nameV,
+            returnType: saveBody ? returnType : retiv,
             params,
-            body,
+            body : saveBody ? body : [],
             sas: offset
         };
 
-        functions[name] = fn;
+        functions[saveBody ? name : nameV] = fn;
 
         return new IrInstruction("Function", [fn]);
     }
@@ -327,7 +350,7 @@ export function parse(tokens) {
 
         ir.push(ab);
 
-        if (deref) {
+        if (deref && !msr) {
             ir.push(loadPointer());
         }
 
@@ -382,7 +405,7 @@ export function parse(tokens) {
             msr
         };
     }
-    function parseVariableDecl(addFile=true) {
+    function parseVariableDecl(addFile=true, externed=false) {
         let type = consume().value;
 
         let pointer = false;
@@ -393,6 +416,15 @@ export function parse(tokens) {
         }
 
         let name = consume().value;
+
+        if (externed) {
+            if (peek().value == '(') {
+                parseFunction(false, name, type);
+                expect(";");
+                return;
+
+            }
+        }
 
         expect(";");
 
@@ -427,6 +459,15 @@ export function parse(tokens) {
         }
 
         throw new Error("field not found");
+    }
+    function parseReturn() {
+        let ir = [];
+        expect("return");
+        ir.push(new IrInstruction("ChgPrimRe", []));
+        ir.push(...parseSymbol().ir);
+        ir.push(new IrInstruction("ExitFunction", []));
+        expect(";");
+        return ir;
     }
 
     function parseSymbol() {
@@ -525,8 +566,25 @@ export function parse(tokens) {
         ];
     }
     function inCodeSpace() {
+        if (peek().value === "return") {
+            return parseReturn();
+        }
+
+        if (peek().value === '__asm__') {
+            consume();
+            expect("(");
+            let v = consume().value;
+            expect(")");
+            expect(";");
+            return [new IrInstruction('AsmInsert', [v])];
+        }
+
         if (peek().value === "while") {
             return parseWhile();
+        }
+
+        if (peek().value === 'if') {
+            return parseIf();
         }
 
         if (
@@ -643,11 +701,55 @@ export function parse(tokens) {
             )
         ];
     }
+    function parseIf(){
+
+        expect("if");
+        expect("(");
+
+        let condition = parseCondition();
+
+        expect(")");
+        expect("{");
+
+        let body=[];
+
+        while(peek().value !== "}") {
+            body.push(...inCodeSpace());
+        }
+
+        expect("}");
+
+
+        let start = newLabel("if");
+        let end = newLabel("endif");
+
+
+        return [
+            new IrInstruction(
+                "Label",
+                [start]
+            ),
+
+            ...condition.ir,
+
+            new IrInstruction(
+                "JumpFalse",
+                [end]
+            ),
+
+            ...body,
+
+            new IrInstruction(
+                "Label",
+                [end]
+            )
+        ];
+    }
     function inDataSpace() {
         if (isFunction()) {return [parseFunction()];}
         if (peek().value === 'extern') {
             consume();
-            parseVariableDecl(false);
+            parseVariableDecl(false, true);
             return [];
         }
         if (peek().value === 'struct') {
@@ -818,6 +920,15 @@ export function codeGen(pparsed) {
         else if(p.getType()==="JumpTrue"){
             return `jifeq ${p.ps[0]}`;
         }
+        else if(p.getType()==="AsmInsert") {
+            return p.ps[0];
+        }
+        else if(p.getType()=='ExitFunction') {
+            let out = [];
+            out.push("leave");
+            out.push("   ret");
+            return out.join("\n");
+        }
         else if(p.getType()==="JumpFalse"){
             return `cmp r2, r2, 0 jifeq ${p.ps[0]}`;
         }
@@ -879,7 +990,7 @@ export function codeGen(pparsed) {
         return '';
     }
     function genA(p) {
-        return genB(p) //+ "; " + p.getType();
+        return genB(p) //+ "; "+ p.getType();
     }
 
     return pparsed.map(genA).filter(x => x.trim() !== "").join("\n");

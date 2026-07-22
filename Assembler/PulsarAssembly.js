@@ -10,6 +10,8 @@ let resulta = p3264asm.asm.assembleCode(asmFileContent);
 let result = resulta.result;
 let hex = result.map(b => b.toString(16).padStart(2, '0')).join('\n');
 
+//console.log(resulta.context)
+
 if (argv.includes("-d")) {
     hex = result.map(b => b.toString()).join('\n');
 }

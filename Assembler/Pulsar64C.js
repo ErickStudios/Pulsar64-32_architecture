@@ -9,4 +9,4 @@ let tok = p64cc.tokenize(asmFileContent);
 let par = p64cc.parse(tok);
 let result = p64cc.codeGen(par);
 
-fileSystem.writeFileSync(outpudFile, result);
+fileSystem.writeFileSync(outpudFile, result + "\n");
