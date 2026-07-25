@@ -1,4 +1,6 @@
 
+npx esbuild "$PSScriptRoot/Assembler/Pulsar3264toolchain.js" --bundle --platform=node --format=esm "--outfile=$PSScriptRoot/Assembler/pulsarToolchain.js"
+
 & "$PSScriptRoot/CpuSource/LinkCpu.ps1"
 
 & "$PSScriptRoot/TestsAndPcs/pulsar5024XM_x32/build.ps1"

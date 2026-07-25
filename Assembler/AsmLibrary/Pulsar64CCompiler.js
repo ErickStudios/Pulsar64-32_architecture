@@ -267,6 +267,10 @@ export function parse(tokens) {
             sas: offset
         };
 
+        variables[name] = {
+            type: 'long',
+            pointer: true
+        }
         functions[saveBody ? name : nameV] = fn;
 
         return new IrInstruction("Function", [fn]);
@@ -287,9 +291,8 @@ export function parse(tokens) {
     }
     function getSize(field) {
 
-        if (field.pointer)
+        if (field.pointer || field.function)
             return 8;
-
 
         if (field.type === "long")
             return 8;
@@ -384,8 +387,12 @@ export function parse(tokens) {
                 .fields
                 .find(f => f.name === field);
 
-
-            currentType = fieldInfo.type;
+            if (fieldInfo.function) {
+                currentType = "function";
+            }
+            else {
+                currentType = fieldInfo.type;
+            }
         }
 
         let pointer = variable.pointer;
@@ -472,6 +479,19 @@ export function parse(tokens) {
 
     function parseSymbol() {
 
+        if (peek().value in functions) {
+            return {
+                ir:[
+                    new IrInstruction(
+                        'LoadFlat',
+                        [consume().value]
+                    )
+                ],
+                type:'long',
+                pointer:false
+            };
+        }
+
         if (peek().value === "&") {
             consume();
 
@@ -498,8 +518,8 @@ export function parse(tokens) {
         }
 
         let a = variableReference();
-        if (!a.msr) 
-        a.ir.push(
+        if (a.type === 'function' || !a.msr) 
+            a.ir.push(
             new IrInstruction(
                 'Get',
                 [
@@ -529,12 +549,14 @@ export function parse(tokens) {
         if (type === "char")
             return 1;
 
+        if (type === 'function')
+            return 8;
 
         return structs[type]?.size ?? 0;
     }
-    function parseCall() {
+    function parseCall(tar=null) {
 
-        let name = consume().value;
+        let target = tar !== null ? tar : parseSymbol();
 
         expect("(");
 
@@ -552,14 +574,13 @@ export function parse(tokens) {
 
         expect(")");
 
-        expect(";");
-
+        if (tar === null) expect(";");
 
         return [
             new IrInstruction(
                 "Call",
                 [
-                    name,
+                    target.ir,
                     args
                 ]
             )
@@ -596,8 +617,13 @@ export function parse(tokens) {
         
         let boda = [new IrInstruction('ChgPrimRe', [])];
         let ab = variableReference();
-        boda.push(...ab.ir);
-        if (peek().value == '=') {
+        if (peek().value == '(') {
+            if (ab.type === "function")
+                ab.ir.push(loadPointer())
+            boda.push(...parseCall(ab))
+        }
+        else if (peek().value == '=') {
+            boda.push(...ab.ir);
             consume();
             boda.push(new IrInstruction('ChgSecRe', []));
             let s = parseSymbol();
@@ -784,23 +810,72 @@ export function parse(tokens) {
             if (peek().value === 'struct') consume();
 
             let type = consume().value;
+            let params = [];
 
-            let pointer = false;
-
-            if (peek().value === "*") {
+            // char (*puts)(char* str);
+            let castFunc1 = false;
+            let field = null;
+            if (peek().value == '(') {
                 consume();
-                pointer = true;
+                expect("*");
+                field = consume().value;
+                expect(")");
+                castFunc1 = true;
             }
+            let pointer = false
+            if (!field) {
+                pointer = false;
 
-            let field = consume().value;
+                if (peek().value === "*") {
+                    consume();
+                    pointer = true;
+                }
+
+                field = consume().value;
+            }
+            else if (castFunc1) {
+                expect("(");
+                while (peek().value !== ")") {
+
+                    if (peek().value === 'struct') consume();
+
+                    let type = consume().value;
+
+                    let pointer = false;
+                    if (peek().value === "*") {
+                        consume();
+                        pointer = true;
+                    }
+
+                    let param = consume().value;
+
+                    params.push({
+                        name: param,
+                        type,
+                        pointer
+                    });
+
+                    if (peek().value === ",")
+                        consume();
+                }
+
+                expect(")");
+            }
 
             expect(";");
 
-            fields.push({
+            let fd = {
                 name: field,
                 type,
-                pointer
-            });
+                pointer,
+                function: castFunc1
+            }
+
+            if (castFunc1) {
+                fd.params = params;
+            }
+
+            fields.push(fd);
         }
 
         expect("}");
@@ -863,7 +938,7 @@ export function codeGen(pparsed) {
             secondary = 2;
         }
         else if (p.getType() === 'LoadValue') {
-            return `li64 ${mainReg()}, ${String(p.ps[0])}`;
+            return `laddr ${mainReg()}, ${String(p.ps[0])}`;
         }
         else if (p.getType() === 'Field') {
             if (p.ps[0] !== 0)
@@ -872,7 +947,7 @@ export function codeGen(pparsed) {
             return "";
         }
         else if (p.getType() === 'Desreference') {
-            return `mov ${mainReg()}, [qword ${mainReg()}]`;
+            return `deref ${mainReg()}`;
         }
         else if (p.getType() === 'Store') {
             return `mwr${String(p.ps[0] * 8)} r0, r1`;
@@ -902,7 +977,7 @@ export function codeGen(pparsed) {
             return `li64 ${mainReg()}, ${String(p.ps[0])}`;
         }
         else if (p.getType() === 'Get') {
-            return `lv${String(p.ps[0] * 8)} ${mainReg()}, ${mainReg()}`
+            return `lalts${String(p.ps[0] * 8)} ${mainReg()}`
         }
         else if (p.getType() === 'Declare') {
             return `${p.ps[0]}: reserve ${p.ps[2]}`;
@@ -937,7 +1012,7 @@ export function codeGen(pparsed) {
         }
         else if (p.getType() === "Call") {
 
-            let name = p.ps[0];
+            let target = p.ps[0];
             let args = p.ps[1];
 
             let out = [];
@@ -958,8 +1033,12 @@ export function codeGen(pparsed) {
                 argn++;
             }
 
+            for (let ins of target) {
+                out.push(genA(ins));
+            }
+
             out.push(
-                (argn !== 0 ? `   ` : "") + `bl ${name}`
+                `bl ${mainReg()}`
             );
 
             out.push(
@@ -990,7 +1069,7 @@ export function codeGen(pparsed) {
         return '';
     }
     function genA(p) {
-        return genB(p) //+ "; "+ p.getType();
+        return genB(p) + "; "+ p.getType();
     }
 
     return pparsed.map(genA).filter(x => x.trim() !== "").join("\n");

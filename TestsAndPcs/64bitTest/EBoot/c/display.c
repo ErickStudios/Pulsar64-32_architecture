@@ -68,6 +68,5 @@ char initdisplay() {
         idispIndex = idispIndex + 1;
     }
 
-    drawPixel(1,2,0xFF);
     return 0;
 }

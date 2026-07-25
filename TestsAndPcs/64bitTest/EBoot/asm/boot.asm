@@ -9,12 +9,12 @@ start:
     org64
     mov     r0, 0
     calc    r0
-    li64    sp, TOS
+    laddr   sp, TOS
     bl      main
 halt: hlt
 __uart:             dq 100000h
 __portStartAddr:    dq 50000h
-
 __vend: dq vendorReal
-    align 8 reserve 128
+
+    align 8 reserve 128 
 TOS:

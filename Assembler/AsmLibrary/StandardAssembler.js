@@ -804,6 +804,37 @@ export function AssembleLineWithoutContext(line, ctx, len=null) {
     else if (ctx.in64 && peek7() === 'LI16')  loadInmediate64bits(2);
     else if (ctx.in64 && peek7() === 'LI32')  loadInmediate64bits(4);
     else if (ctx.in64 && peek7() === 'LI64')  loadInmediate64bits(8);
+    else if (ctx.in64 && peek7() === 'LADDR')  loadInmediate64bits(8);
+
+    else if (ctx.in64 && peek7() === 'DEREF')  {
+      consume();
+      let r = consume().value;
+      result.push(...AssembleLineWithoutContext(`mov ${r}, [qword ${r}]`, ctx, len));
+    }
+
+    else if (ctx.in64 && peek7() === 'LALTS64')  {
+      consume();
+      let r = consume().value;
+      result.push(...AssembleLineWithoutContext(`lv64 ${r}, ${r}`, ctx, len));
+    }
+
+    else if (ctx.in64 && peek7() === 'LALTS32')  {
+      consume();
+      let r = consume().value;
+      result.push(...AssembleLineWithoutContext(`lv32 ${r}, ${r}`, ctx, len));
+    }
+
+    else if (ctx.in64 && peek7() === 'LALTS16')  {
+      consume();
+      let r = consume().value;
+      result.push(...AssembleLineWithoutContext(`lv16 ${r}, ${r}`, ctx, len));
+    }
+
+    else if (ctx.in64 && peek7() === 'LALTS8')  {
+      consume();
+      let r = consume().value;
+      result.push(...AssembleLineWithoutContext(`lv8 ${r}, ${r}`, ctx, len));
+    }
 
     else if (ctx.in64 && peek7() === 'JIFEQ') parseJmpIfFlag64(0);
     else if (ctx.in64 && peek7() === 'JINEG') parseJmpIfFlag64(1);

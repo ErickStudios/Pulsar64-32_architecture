@@ -17,27 +17,45 @@ extern char puts(char* str);
 
 // Include Screen Functions
 extern char initdisplay();
+extern char drawPixel(char x, char y, char color);
 
 // EBoot Functions Structure
 struct EBootPayloadTable {
-    char* vendorPtr;
+    char*   vendorPtr;
+    char    (*puts)     (char* str);
+    char    (*drawPixel)(char x, char y, char color);
+    char    (*outPort)  (long port, char data);
+    char    (*inPort)   (long port, char* data);
+    char    (*readDisk) (char* buffer, long lba);
 };
 
 // The Original Table
 struct EBootPayloadTable Table;
 
+extern char test(struct EBootPayloadTable* info);
+
 long entryBoot;
 // The Main Function
 char main() {
-    Table.vendorPtr = __vend;
-    UartAddr = __uart;
-    
-    initdisplay();
-    puts(__vend);
-    readDisk(BootSectorLoader, 0);
+    // Initialize Bases
+    Table.vendorPtr =   __vend;
+    UartAddr =          __uart;
 
-    entryBoot = BootSectorLoader;
-    __asm__ ("li64 lnk, entryBoot lv64 lnk, lnk bl lnk");
+    // Initialize Firmware
+    initdisplay ();
+    puts        (__vend);
+    readDisk    (BootSectorLoader, 0);
+
+    // Initialize Services
+    Table.drawPixel =   drawPixel;
+    Table.puts =        puts;
+    Table.outPort =     outPort;
+    Table.inPort =      inPort;
+    Table.readDisk =    readDisk;
+
+    test(&Table);
 }
 
-// codigo suelto inacesible
+long drv;
+char test(struct EBootPayloadTable* info) {
+}
