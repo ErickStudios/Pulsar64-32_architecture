@@ -176,18 +176,24 @@ function AssembleLineWithoutContext(line, ctx2, len = null) {
       let x = parsePrimary();
       let opr = consume().value;
       let y = parsePrimary();
+      x = parseIdent(x.value);
+      y = parseIdent(y.value);
       expect(")");
       let bz = 0;
       if (opr === "+") {
-        bz = Math.ceil(x.value + y.value);
+        bz = Math.ceil(x + y);
       } else if (opr === "-") {
-        bz = Math.ceil(x.value - y.value);
+        bz = Math.ceil(x - y);
       } else if (opr === "/") {
-        bz = Math.ceil(x.value / y.value);
+        bz = Math.ceil(x / y);
       } else if (opr === "*") {
-        bz = Math.ceil(x.value * y.value);
+        bz = Math.ceil(x * y);
       }
       return { type: "inm", value: bz };
+    }
+    if (peek().value === "$") {
+      consume();
+      return { type: "inm", value: len !== null ? len : 0 };
     }
     if (typeof peek().value === "number") return { type: "inm", value: consume().value };
     if (peek7() === "SP") {
@@ -399,6 +405,7 @@ function AssembleLineWithoutContext(line, ctx2, len = null) {
     if (f3 === "R6") return 9;
     if (f3 === "LNK") return 10;
     if (f3 === "BP") return 11;
+    if (f3 === "IP") return 12;
     return 0;
   }
   function parseSegmentRegister() {
@@ -435,7 +442,7 @@ function AssembleLineWithoutContext(line, ctx2, len = null) {
     let expr = parse64bitExpr();
     if (expr.t === "a") {
       result.push(...AssembleLineWithoutContext(
-        `li64 lnk, ${expr.a} gb ${flag.toString()} lnk`,
+        `laddr lnk, ${expr.a} gb ${flag.toString()} lnk`,
         ctx2,
         len
       ));
@@ -716,6 +723,12 @@ function AssembleLineWithoutContext(line, ctx2, len = null) {
           pop r1
           pop r0
         `, ctx2, len));
+    } else if (ctx2.in64 && peek7() === ".") {
+      consume();
+      let directive = consume().value;
+      if (directive.toUpperCase() === "PIC") {
+        ctx2.pic = consume().value;
+      }
     } else if (ctx2.in64 && peek7() === "MWR8") parseMemWrite(1);
     else if (ctx2.in64 && peek7() === "MWR16") parseMemWrite(2);
     else if (ctx2.in64 && peek7() === "MWR32") parseMemWrite(4);
@@ -742,8 +755,19 @@ function AssembleLineWithoutContext(line, ctx2, len = null) {
     else if (ctx2.in64 && peek7() === "LI16") loadInmediate64bits(2);
     else if (ctx2.in64 && peek7() === "LI32") loadInmediate64bits(4);
     else if (ctx2.in64 && peek7() === "LI64") loadInmediate64bits(8);
-    else if (ctx2.in64 && peek7() === "LADDR") loadInmediate64bits(8);
-    else if (ctx2.in64 && peek7() === "DEREF") {
+    else if (ctx2.in64 && peek7() === "LADDR") {
+      if ("pic" in ctx2) {
+        consume();
+        let re = parse64bitReg();
+        expect(",");
+        let dir = parseIdent(parsePrimary().value) - len;
+        dir -= 4;
+        if (dir < 0) {
+          dir = -dir & 8388607 | 8388608;
+        }
+        result.push(48 | re, ...toBigEndianBytes(dir, 3));
+      } else loadInmediate64bits(8);
+    } else if (ctx2.in64 && peek7() === "DEREF") {
       consume();
       let r = consume().value;
       result.push(...AssembleLineWithoutContext(`mov ${r}, [qword ${r}]`, ctx2, len));
@@ -1016,8 +1040,8 @@ function AssembleLineWithoutContext(line, ctx2, len = null) {
       expect("-");
       let action = consume();
       if (fmt7(action.value) === "ORG") {
-        let inWhere = consume();
-        ctx2.orgIn = inWhere.value;
+        let inWhere = parseIdent(parsePrimary().value);
+        ctx2.orgIn = inWhere;
       } else if (parseSize(fmt8(action)) !== void 0) {
         let sizeof = psfmt72(action.value);
         let primarys = toBigEndianBytes(parseIdent(parsePrimary().value), sizeof);
@@ -1093,11 +1117,12 @@ function AssembleCode(code) {
   let result = [];
   let context = new Context();
   lines.forEach((line, i) => {
-    let lineAssembled = AssembleLineWithoutContext(line, context);
+    let lineAssembled = AssembleLineWithoutContext(line, context, context.codelen);
     context.codelen += lineAssembled.length;
   });
   context.passDefedNot = true;
   let len = 0;
+  lines = code.split("\n");
   lines.forEach((line, i) => {
     let lineAssembled = AssembleLineWithoutContext(line, context, len);
     result.push(...lineAssembled);
@@ -1242,18 +1267,26 @@ var IrInstruction = class {
     return this.name + " " + this.ps.join(",");
   }
 };
-function parse(tokens) {
+var CtxTempExp = class {
+  constructor() {
+    this.structs = {};
+  }
+};
+function parse(tokens, ctx2 = null) {
   let i = 0;
   let functions = {};
   let variables = {};
   let structs = {};
+  let befvars = [];
+  let endname = "";
+  let funcinitvr;
   function peek() {
     return tokens[i];
   }
   function consume() {
-    let a = peek();
+    let a2 = peek();
     i++;
-    return a;
+    return a2;
   }
   function expect(value) {
     let t = consume();
@@ -1316,21 +1349,41 @@ function parse(tokens) {
       offset += 8;
     }
     let body = [];
+    let fna = [];
+    let nobj = {
+      name,
+      ir: fna,
+      ssa,
+      offsa: offset,
+      params
+    };
+    let befa = funcinitvr;
     if (saveBody) {
       expect("{");
       while (peek().value !== "}") {
-        body.push(...inCodeSpace());
+        funcinitvr = nobj;
+        let oi = i;
+        try {
+          let ab = inCodeSpace();
+          body.push(...ab);
+        } catch (e) {
+          i = oi;
+          body.push(...inDataSpace());
+        }
       }
+      funcinitvr = befa;
       expect("}");
     }
-    Object.keys(variables).filter((a) => variables[a].pp === ssa).forEach((a) => delete variables[a]);
+    Object.keys(variables).filter((a2) => variables[a2].pp === ssa).forEach((a2) => delete variables[a2]);
     let fn = {
       type: "Function",
       name: saveBody ? name : nameV,
       returnType: saveBody ? returnType : retiv,
       params,
       body: saveBody ? body : [],
-      sas: offset
+      preb: fna,
+      sas: offset,
+      ses: nobj.offsa - offset
     };
     variables[name] = {
       type: "long",
@@ -1344,9 +1397,15 @@ function parse(tokens) {
   }
   function loadValue(name) {
     let v = variables[name];
+    if ("offsata" in v) {
+      let bc = [];
+      bc.push(new IrInstruction("LoadFlat", [v.offsata]));
+      bc.push(new IrInstruction("Inline", ["sub $$m, bp, $$m"]));
+      return bc;
+    }
     if (v?.parameter)
       return new IrInstruction("LoadParameter", [v.offset, getTypeSize(v.type)]);
-    return new IrInstruction("LoadValue", [name]);
+    return new IrInstruction("LoadValue", ["altna" in v ? v.altna : name]);
   }
   function loadField(offset) {
     return new IrInstruction("Field", [offset]);
@@ -1388,10 +1447,11 @@ function parse(tokens) {
     let currentType = variable.type;
     let ab = loadValue(name);
     let msr = false;
-    if (ab.getType() == "LoadParameter") {
+    if (!Array.isArray(ab) && ab.getType() == "LoadParameter") {
       msr = true;
     }
-    ir.push(ab);
+    ab = Array.isArray(ab) ? ab : [ab];
+    ir.push(...ab);
     if (deref && !msr) {
       ir.push(loadPointer());
     }
@@ -1438,6 +1498,11 @@ function parse(tokens) {
       pointer = true;
     }
     let name = consume().value;
+    let stra = null;
+    if (!externed && peek().value == "=") {
+      consume();
+      stra = consume().value;
+    }
     if (externed) {
       if (peek().value == "(") {
         parseFunction(false, name, type);
@@ -1450,14 +1515,24 @@ function parse(tokens) {
       type,
       pointer
     };
+    if (funcinitvr) {
+      variables[name].altna = "__" + funcinitvr.name + "_" + name;
+      variables[name].pp = funcinitvr.ssa;
+      variables[name].offsata = funcinitvr.offsa + 16 + (pointer ? 8 : getTypeSize(type));
+      funcinitvr.offsa += pointer ? 8 : getTypeSize(type);
+    }
     if (addFile) {
+      if (funcinitvr) {
+        return new IrInstruction("Nop", []);
+      }
       return new IrInstruction(
         "Declare",
         [
           name,
           type,
           pointer ? 8 : getTypeSize(type),
-          8
+          8,
+          stra
         ]
       );
     }
@@ -1477,7 +1552,7 @@ function parse(tokens) {
     expect("return");
     ir.push(new IrInstruction("ChgPrimRe", []));
     ir.push(...parseSymbol().ir);
-    ir.push(new IrInstruction("ExitFunction", []));
+    ir.push(new IrInstruction("ExitFunction", [funcinitvr.name + "__stdend"]));
     expect(";");
     return ir;
   }
@@ -1515,17 +1590,40 @@ function parse(tokens) {
         pointer: false
       };
     }
-    let a = variableReference();
-    if (a.type === "function" || !a.msr)
-      a.ir.push(
+    if (peek().value === "sizeof") {
+      consume();
+      expect("(");
+      let ptr = false;
+      let name;
+      if (peek().value === "struct") consume();
+      name = consume().value;
+      if (peek().value === "*") {
+        ptr = true;
+        consume();
+      }
+      expect(")");
+      return {
+        ir: [
+          new IrInstruction(
+            "LoadFlat",
+            [ptr ? 8 : getSize(name)]
+          )
+        ],
+        type: "long",
+        pointer: false
+      };
+    }
+    let a2 = variableReference();
+    if (a2.type === "function" || !a2.msr)
+      a2.ir.push(
         new IrInstruction(
           "Get",
           [
-            a.pointer ? 8 : getTypeSize(a.type)
+            a2.pointer ? 8 : getTypeSize(a2.type)
           ]
         )
       );
-    return a;
+    return a2;
   }
   function newLabel(name) {
     return name + "_" + Math.floor(Math.random() * 1e4);
@@ -1580,6 +1678,11 @@ function parse(tokens) {
     if (peek().value === "while") {
       return parseWhile();
     }
+    if (peek().value === "break") {
+      consume();
+      expect(";");
+      return [new IrInstruction("Jump", [endname])];
+    }
     if (peek().value === "if") {
       return parseIf();
     }
@@ -1623,6 +1726,38 @@ function parse(tokens) {
         ab.pointer ? 8 : getTypeSize(ab.type),
         s.pointer ? 8 : getTypeSize(s.type)
       ]));
+    } else if (peek().value == "+") {
+      consume();
+      if (peek().value == "+") {
+        boda.push(...ab.ir);
+        consume();
+        boda.push(new IrInstruction("ChgSecRe", []));
+        boda.push(...ab.ir);
+        boda.push(new IrInstruction("Get", [ab.pointer ? 8 : getTypeSize(ab.type)]));
+        boda.push(new IrInstruction("ChgTerRe", []));
+        boda.push(new IrInstruction("LoadFlat", [1]));
+        boda.push(new IrInstruction(`Add`));
+        boda.push(new IrInstruction(`Store`, [
+          ab.pointer ? 8 : getTypeSize(ab.type),
+          ab.pointer ? 8 : getTypeSize(ab.type)
+        ]));
+      }
+    } else if (peek().value == "-") {
+      consume();
+      if (peek().value == "-") {
+        boda.push(...ab.ir);
+        consume();
+        boda.push(new IrInstruction("ChgSecRe", []));
+        boda.push(...ab.ir);
+        boda.push(new IrInstruction("Get", [ab.pointer ? 8 : getTypeSize(ab.type)]));
+        boda.push(new IrInstruction("ChgTerRe", []));
+        boda.push(new IrInstruction("LoadFlat", [1]));
+        boda.push(new IrInstruction(`Sub`));
+        boda.push(new IrInstruction(`Store`, [
+          ab.pointer ? 8 : getTypeSize(ab.type),
+          ab.pointer ? 8 : getTypeSize(ab.type)
+        ]));
+      }
     }
     expect(";");
     return boda;
@@ -1637,6 +1772,19 @@ function parse(tokens) {
     let right = parseSymbol();
     ada.push(...right.ir);
     ada.push(new IrInstruction("Compare", [op]));
+    if (op === "<") {
+      let jal = newLabel("setl");
+      ada.push(new IrInstruction("LoadFlat", [1]));
+      ada.push(new IrInstruction("JmpIfLess", [jal]));
+      ada.push(new IrInstruction("LoadFlat", [0]));
+      ada.push(new IrInstruction("Label", [jal]));
+    } else if (op === ">") {
+      let jal = newLabel("setg");
+      ada.push(new IrInstruction("LoadFlat", [1]));
+      ada.push(new IrInstruction("JmpIfGreater", [jal]));
+      ada.push(new IrInstruction("LoadFlat", [0]));
+      ada.push(new IrInstruction("Label", [jal]));
+    }
     return {
       ir: ada
     };
@@ -1644,17 +1792,24 @@ function parse(tokens) {
   function parseWhile() {
     expect("while");
     expect("(");
+    let start = newLabel("while");
+    let end = newLabel("end");
     let condition = parseCondition();
+    let preir = [];
     expect(")");
     expect("{");
     let body = [];
     while (peek().value !== "}") {
+      endname = end;
       body.push(...inCodeSpace());
     }
     expect("}");
-    let start = newLabel("while");
-    let end = newLabel("end");
+    preir.push(new IrInstruction(
+      "SaveRet",
+      []
+    ));
     return [
+      ...preir,
       new IrInstruction(
         "Label",
         [start]
@@ -1672,6 +1827,10 @@ function parse(tokens) {
       new IrInstruction(
         "Label",
         [end]
+      ),
+      new IrInstruction(
+        "RestoreEnd",
+        []
       )
     ];
   }
@@ -1706,11 +1865,42 @@ function parse(tokens) {
     ];
   }
   function inDataSpace() {
+    if (peek().value == "/") {
+      let oldi = i;
+      consume();
+      if (peek().value == "*") {
+        consume();
+        let dis = false;
+        if (peek().value === "!") {
+          dis = true;
+          consume();
+        }
+        let ca = consume().value;
+        expect("*");
+        expect("/");
+        return [new IrInstruction(dis ? "Disable" : "Enable", [ca])];
+      } else i = oldi;
+    }
     if (isFunction()) {
       return [parseFunction()];
     }
     if (peek().value === "extern") {
       consume();
+      if (peek().value === "struct") {
+        let oldi = i;
+        consume();
+        let sname = consume().value;
+        if (peek().value !== ";") {
+          i = oldi;
+        } else {
+          if (ctx2 && ctx2 instanceof CtxTempExp) {
+            structs[sname] = ctx2.structs[sname];
+          }
+          expect(";");
+          return [];
+        }
+      }
+      if (peek().value === "struct") consume();
       parseVariableDecl(false, true);
       return [];
     }
@@ -1812,10 +2002,17 @@ function parse(tokens) {
     }
     return ir;
   }
-  return parseProgram();
+  let a = parseProgram();
+  if (ctx2 && ctx2 instanceof CtxTempExp) {
+    for (let m of Object.getOwnPropertyNames(structs)) {
+      ctx2.structs[m] = structs[m];
+    }
+  }
+  return a;
 }
 function codeGen(pparsed) {
   let secondary = 0;
+  let enableds = {};
   function mainReg() {
     return `r${secondary}`;
   }
@@ -1825,6 +2022,16 @@ function codeGen(pparsed) {
     4: "dword",
     8: "qword"
   };
+  function optimizeNumLoader(n) {
+    if (n <= 255) {
+      return `mov`;
+    } else if (n <= 65535) {
+      return `li16`;
+    } else if (n <= 4294967295) {
+      return `li32`;
+    }
+    return "li64";
+  }
   function genB(p) {
     if (p.getType() === "ChgPrimRe") {
       secondary = 0;
@@ -1833,7 +2040,12 @@ function codeGen(pparsed) {
     } else if (p.getType() === "ChgTerRe") {
       secondary = 2;
     } else if (p.getType() === "LoadValue") {
-      return `laddr ${mainReg()}, ${String(p.ps[0])}`;
+      return `${"use32Addr" in enableds ? "li32" : "laddr"} ${mainReg()}, ${String(p.ps[0])}`;
+    } else if (p.getType() === "Enable") {
+      enableds[p.ps[0]] = "xd";
+      if (p.ps[0] === "pic") return ".pic sss_unused";
+    } else if (p.getType() === "Disable") {
+      delete enableds[p.ps[0]];
     } else if (p.getType() === "Field") {
       if (p.ps[0] !== 0)
         return `add ${mainReg()}, ${mainReg()}, ${String(p.ps[0])}`;
@@ -1857,10 +2069,22 @@ function codeGen(pparsed) {
     } else if (p.getType() === "And") {
       return `and r1, r1, r2`;
     } else if (p.getType() === "LoadFlat") {
+      if (typeof p.ps[0] === "number") {
+        if (p.ps[0] <= 255) {
+          return `mov ${mainReg()}, ${String(p.ps[0])}`;
+        } else if (p.ps[0] <= 65535) {
+          return `li16 ${mainReg()}, ${String(p.ps[0])}`;
+        } else if (p.ps[0] <= 4294967295) {
+          return `li32 ${mainReg()}, ${String(p.ps[0])}`;
+        }
+      }
       return `li64 ${mainReg()}, ${String(p.ps[0])}`;
     } else if (p.getType() === "Get") {
       return `lalts${String(p.ps[0] * 8)} ${mainReg()}`;
     } else if (p.getType() === "Declare") {
+      if (p.ps[4] !== null) {
+        return `${p.ps[0]}: db ${[...Buffer.from(p.ps[4]), 0].map((v) => "0" + Number(v).toString(16) + "h").join(",")}`;
+      }
       return `${p.ps[0]}: reserve ${p.ps[2]}`;
     } else if (p.getType() === "LoadParameter") {
       return `mov ${mainReg()}, [qword bp-${p.ps[0]}]`;
@@ -1870,17 +2094,26 @@ function codeGen(pparsed) {
       return `jmp ${p.ps[0]}`;
     } else if (p.getType() === "JumpTrue") {
       return `jifeq ${p.ps[0]}`;
+    } else if (p.getType() === "JmpIfLess") {
+      return `jineg ${p.ps[0]}`;
+    } else if (p.getType() === "JmpIfGreater") {
+      return `jipos ${p.ps[0]}`;
     } else if (p.getType() === "AsmInsert") {
       return p.ps[0];
     } else if (p.getType() == "ExitFunction") {
       let out = [];
-      out.push("leave");
-      out.push("   ret");
+      out.push(`jmp ${p.ps[0]}`);
       return out.join("\n");
     } else if (p.getType() === "JumpFalse") {
       return `cmp r2, r2, 0 jifeq ${p.ps[0]}`;
+    } else if (p.getType() === "SaveRet") {
+      return `push lnk`;
+    } else if (p.getType() === "RestoreEnd") {
+      return `pop lnk`;
     } else if (p.getType() === "Compare") {
       return `cmp r2, r0, r1`;
+    } else if (p.getType() === "Inline") {
+      return p.ps[0].replaceAll("$$m", mainReg());
     } else if (p.getType() === "Call") {
       let target = p.ps[0];
       let args = p.ps[1];
@@ -1897,25 +2130,36 @@ function codeGen(pparsed) {
         argn++;
       }
       for (let ins of target) {
-        out.push(genA(ins));
+        out.push((argn !== 0 ? `   ` : "") + genA(ins));
+        argn++;
       }
       out.push(
-        `bl ${mainReg()}`
+        `${argn !== 0 ? `   ` : ""}bl ${mainReg()}`
       );
+      argn++;
       out.push(
         `   add sp, sp, ${args.length * 8}`
       );
+      argn++;
       return out.filter((x) => x.trim() !== "").join("\n");
     } else if (p.getType() === "Function") {
       let fn = p.ps[0];
       let out = [];
+      for (let ins of fn.preb) {
+        out.push((ins.getType() !== "Label" ? "   " : "") + genA(ins));
+      }
       out.push(`${fn.name}:`);
       let v = (fn.sas / 8 - 1) * 8;
       if (!(v >= 0)) v = 0;
       out.push(`   enter ${v}`);
+      out.push(`   ${optimizeNumLoader(fn.ses + 8)} r4, ${fn.ses + 8}`);
+      out.push(`   sub sp, sp, r4`);
       for (let ins of fn.body) {
         out.push((ins.getType() !== "Label" ? "   " : "") + genA(ins));
       }
+      out.push(`${fn.name}__stdend:`);
+      out.push(`   ${optimizeNumLoader(fn.ses + 8)} r4, ${fn.ses + 8}`);
+      out.push(`   add sp, sp, r4`);
       out.push("   leave");
       out.push("   ret");
       return out.filter((x) => x.trim() !== "").join("\n");
@@ -1923,13 +2167,14 @@ function codeGen(pparsed) {
     return "";
   }
   function genA(p) {
-    return genB(p) + "; " + p.getType();
+    return genB(p);
   }
   return pparsed.map(genA).filter((x) => x.trim() !== "").join("\n");
 }
 
 // Assembler/Pulsar3264toolchain.js
 import * as fileSystem from "node:fs";
+var cContext = new CtxTempExp();
 var Arguments = ["--c", "--asm"];
 var argsIndex = 2;
 function Peek() {
@@ -1956,7 +2201,7 @@ function ConvertCFileToAsm(filePath) {
   let asmFile = filePath;
   let asmFileContent = fileSystem.readFileSync(asmFile, "utf-8");
   let tok = tokenize2(asmFileContent);
-  let par = parse(tok);
+  let par = parse(tok, cContext);
   let result = codeGen(par);
   return result;
 }
@@ -1968,6 +2213,7 @@ function UnsiA() {
     ar.forEach((v) => {
       asmGigantFile += ConvertCFileToAsm(v) + "\n";
     });
+    cContext = new CtxTempExp();
     fileSystem.writeFileSync(ctx[ctx.currentMode].outFile, asmGigantFile);
   } else if (ctx.currentMode == "--asm") {
     let asmGigantFile = "";

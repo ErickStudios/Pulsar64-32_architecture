@@ -551,6 +551,7 @@ begin
     9: regVal = x6;
     10:regVal = i64lnk;
     11:regVal = xbp;
+    12:regVal = xpc;
     default: regVal = 0;
     endcase
 end endtask
@@ -985,6 +986,18 @@ always @(posedge clk) begin
                     solveReg64bit(i64bytes[1][7:4], i64temp);
                     if (!quiet) $display("OPERATION%0d %0d ((%0d)%0d (%0d)%0d) = %0d", i64opr, i64bytes[0][7:4], i64bytes[1][3:2], i64a, i64bytes[1][1:0], i64b, i64temp); 
                 end // operations
+                else if ((i64bytes[0] & 8'hF0) == 8'h30) begin
+                    i64opr = i64bytes[0][3:0];
+                    i64temp = (i64bytes[1] << 16) | (i64bytes[2] << 8) | i64bytes[3];
+                    if (i64temp[23] == 1) begin
+                        i64temp = xpc - i64temp[22:0];
+                    end
+                    else begin
+                        i64temp = xpc + i64temp;
+                    end
+                    set64BitReg(i64opr, i64temp);
+                    if (!quiet) $display("LPIC %0d TO %0d", i64temp, i64opr); 
+                end // operations
                 else begin case (i64bytes[0]) 
                 8'h01: begin
                     if (i64bytes[1] == 8'hFF) begin
@@ -1104,8 +1117,10 @@ always @(posedge clk) begin
                             WriteMem64(i64memre + i, (i64temp >> (8 * (i64bysiz - 1 - i))) & 8'hFF);
                         end
                     end // mem write
-                end // mem 
-                default: $display("Invalid Opcode %0x", i64bytes[0]);
+                end // mem manager
+                default: begin 
+                    if (!quiet) $display("Invalid Opcode %0x", i64bytes[0]); 
+                end
                 endcase end // other
             end
             

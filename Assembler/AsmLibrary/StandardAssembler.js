@@ -177,28 +177,34 @@ export function AssembleLineWithoutContext(line, ctx, len=null) {
     }
     if (peek().value === '(') {
       consume();
-      let x = parsePrimary();
+      let x = (parsePrimary());
       let opr = consume().value;
-      let y = parsePrimary();
+      let y = (parsePrimary());
+      x = parseIdent(x.value)
+      y = parseIdent(y.value);
 
       expect(')');
 
       let bz = 0;
 
       if (opr === '+') {
-        bz = Math.ceil(x.value + y.value);
+        bz = Math.ceil(x + y);
       }
       else if (opr === '-') {
-        bz = Math.ceil(x.value - y.value);
+        bz = Math.ceil(x - y);
       }
       else if (opr === '/') {
-        bz = Math.ceil(x.value / y.value);
+        bz = Math.ceil(x / y);
       }
       else if (opr === '*') {
-        bz = Math.ceil(x.value * y.value);
+        bz = Math.ceil(x * y);
       }
 
       return ({ type: 'inm', value: bz });
+    }
+    if (peek().value === '$') {
+      consume();
+      return ({ type: 'inm', value: (len !== null ? len : 0) });
     }
     if (typeof peek().value === 'number') return ({ type: 'inm', value: consume().value });
     if (peek7() === 'SP') {
@@ -411,6 +417,7 @@ export function AssembleLineWithoutContext(line, ctx, len=null) {
     if (f3 === 'R6') return 9;
     if (f3 === 'LNK')return 10;
     if (f3 === 'BP') return 11;
+    if (f3 === 'IP') return 12;
 
     return 0;
   }
@@ -448,7 +455,7 @@ export function AssembleLineWithoutContext(line, ctx, len=null) {
     let expr = parse64bitExpr();
     if (expr.t === 'a') {
       result.push(...AssembleLineWithoutContext(
-        `li64 lnk, ${expr.a} gb ${flag.toString()} lnk`, ctx, len
+        `laddr lnk, ${expr.a} gb ${flag.toString()} lnk`, ctx, len
       ));
     }
     else {
@@ -772,6 +779,14 @@ export function AssembleLineWithoutContext(line, ctx, len=null) {
         `, ctx, len));
     }
 
+    else if (ctx.in64 && peek7() === '.') {
+      consume();
+      let directive = consume().value;
+      if (directive.toUpperCase() === 'PIC') {
+        ctx.pic = consume().value;
+      }
+    }
+
     else if (ctx.in64 && peek7() === 'MWR8')  parseMemWrite(1);
     else if (ctx.in64 && peek7() === 'MWR16') parseMemWrite(2);
     else if (ctx.in64 && peek7() === 'MWR32') parseMemWrite(4);
@@ -804,7 +819,21 @@ export function AssembleLineWithoutContext(line, ctx, len=null) {
     else if (ctx.in64 && peek7() === 'LI16')  loadInmediate64bits(2);
     else if (ctx.in64 && peek7() === 'LI32')  loadInmediate64bits(4);
     else if (ctx.in64 && peek7() === 'LI64')  loadInmediate64bits(8);
-    else if (ctx.in64 && peek7() === 'LADDR')  loadInmediate64bits(8);
+    else if (ctx.in64 && peek7() === 'LADDR')  {
+      if ('pic' in ctx) {
+        consume();
+        let re = parse64bitReg();
+        expect(",");
+        let dir = parseIdent(parsePrimary().value)  - (len/* - (ctx.symbols.has(ctx.pic) ? ctx.symbols.get(ctx.pic) : 0)*/);
+        dir -= 4;
+        if (dir < 0) {
+            dir = ((-dir) & 0x7FFFFF) | 0x800000;
+        }
+
+        result.push(0x30 | re, ...toBigEndianBytes(dir, 3));
+      }
+      else loadInmediate64bits(8)
+    }
 
     else if (ctx.in64 && peek7() === 'DEREF')  {
       consume();
@@ -1119,8 +1148,8 @@ export function AssembleLineWithoutContext(line, ctx, len=null) {
       expect('-');
       let action = consume();
       if (fmt7(action.value) === 'ORG') {
-        let inWhere = consume();
-        ctx.orgIn = inWhere.value;
+        let inWhere = parseIdent(parsePrimary().value);
+        ctx.orgIn = inWhere;
       }
       else if (parseSize(fmt8(action)) !== undefined) {
         let sizeof = psfmt72(action.value);
@@ -1202,11 +1231,12 @@ export function AssembleCode(code) {
   let result = [];
   let context = new Context();
   lines.forEach((line, i) => {
-    let lineAssembled = AssembleLineWithoutContext(line, context);
+    let lineAssembled = AssembleLineWithoutContext(line, context, context.codelen);
     context.codelen += lineAssembled.length;
   })
   context.passDefedNot = true;
   let len = 0;
+  lines = code.split('\n');
   lines.forEach((line,i) => {
     let lineAssembled = AssembleLineWithoutContext(line, context,len);
     result.push(...lineAssembled);

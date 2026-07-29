@@ -10,6 +10,7 @@ extern char inPort(long port, char* data);
 
 // Include Disk Functions
 extern char readDisk(char* buffer, long lba);
+extern char readSects(char* buffer, long lba, long sects);
 
 // Debug Console Functions
 extern char putc(char ch);
@@ -27,12 +28,24 @@ struct EBootPayloadTable {
     char    (*outPort)  (long port, char data);
     char    (*inPort)   (long port, char* data);
     char    (*readDisk) (char* buffer, long lba);
+    char    (*readSects)(char* buffer, long lba, long sects);
+    char    (*activeDebug)();
+};
+
+struct __bootstrap1 {
+    char    (*entry)(struct EBootPayloadTable* info);
 };
 
 // The Original Table
 struct EBootPayloadTable Table;
 
+struct __bootstrap1 ent;
+
 extern char test(struct EBootPayloadTable* info);
+
+char activeDebug() {
+    outPort(0x20, 1);
+}
 
 long entryBoot;
 // The Main Function
@@ -52,8 +65,11 @@ char main() {
     Table.outPort =     outPort;
     Table.inPort =      inPort;
     Table.readDisk =    readDisk;
+    Table.readSects =   readSects;
+    Table.activeDebug = activeDebug;
 
-    test(&Table);
+    ent.entry = BootSectorLoader;
+    ent.entry(&Table);
 }
 
 long drv;

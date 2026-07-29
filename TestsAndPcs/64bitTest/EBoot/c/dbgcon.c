@@ -7,13 +7,11 @@ char putc(char x) {
 }
 
 // String Put
-char putstmp1;
-char* putstmp2;
 char puts(char* msg) {
+    char* putstmp2;
     putstmp2 = msg;
     while (*putstmp2 != 0) {
-        putstmp1 = *putstmp2;
-        putc(putstmp1);
-        putstmp2 = putstmp2 + 1;
+        putc(*putstmp2);
+        putstmp2++;
     }
 }

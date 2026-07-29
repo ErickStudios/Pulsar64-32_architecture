@@ -22,13 +22,13 @@ char drawPixel(char x, char y, char color) {
     outPort(0x36C, color);
 }
 
-char idispTmpData;
-short idispIndex;
-struct ColorRepresentation idispCol;
 char initdisplay() {
+    struct ColorRepresentation idispCol;
+    char idispTmpData;
+    short idispIndex;
+
     // Check For A Display Screen Avaible
     inPort(0x360, &idispTmpData);
-
 
     // Init Configuration
     outPort(0x360, 0x00);   // Says to the display adapter 

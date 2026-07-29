@@ -6,6 +6,8 @@ import {LibraryAssembler as p3264asm } from "./AsmLibrary/StandardAssembler.js";
 import * as p64cc from "./AsmLibrary/Pulsar64CCompiler.js";
 import * as fileSystem from "node:fs";
 
+let cContext = new p64cc.CtxTempExp();
+
 // Arguments
 let Arguments = ['--c','--asm'];
 
@@ -42,7 +44,7 @@ function ConvertCFileToAsm(filePath) {
     let asmFile = filePath;
     let asmFileContent = fileSystem.readFileSync(asmFile, 'utf-8');
     let tok = p64cc.tokenize(asmFileContent);
-    let par = p64cc.parse(tok);
+    let par = p64cc.parse(tok, cContext);
     let result = p64cc.codeGen(par);
     return result;
 }
@@ -58,6 +60,7 @@ function UnsiA() {
             asmGigantFile += ConvertCFileToAsm(v) + "\n";
         })
         
+        cContext = new p64cc.CtxTempExp();
         fileSystem.writeFileSync(ctx[ctx.currentMode].outFile, asmGigantFile);
     }
     else if (ctx.currentMode == '--asm') {

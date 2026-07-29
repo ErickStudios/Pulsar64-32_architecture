@@ -6,6 +6,8 @@ $Launcher   ="node"
 $CFiles     ="$PSScriptRoot/c"
 $COutsf     ="$PSScriptRoot/cout"
 
+#             "$CFiles/lib/protoa.c"          `
+function Ata {
 & $Launcher "$AsmTools/pulsarToolchain.js" `
         --c                                 `
             "$CFiles/main.c"                `
@@ -14,9 +16,25 @@ $COutsf     ="$PSScriptRoot/cout"
             "$CFiles/dbgcon.c"              `
             "$CFiles/display.c"             `
             -out "$PSScriptRoot/outc.asm"   `
+        --c                                 `
+            "$CFiles/tests/bootstrap.c"     `
+            -out "$PSScriptRoot/outc2.asm"  `
         --asm                               `
             "$PSScriptRoot/asm/boot.asm"    `
             "$PSScriptRoot/outc.asm"        `
             "$PSScriptRoot/asm/bottom.asm"  `
             -out "$PSScriptRoot/out.fd"     `
+            -f flat                         `
+        --asm                               `
+            "$PSScriptRoot/outc2.asm"       `
+            -out "$PSScriptRoot/../test.img"`
             -f flat
+}
+
+#& $Launcher "$AsmTools/pulsarToolchain.js" `
+#        --asm                               `
+#            "$PSScriptRoot/outc2.asm"       `
+#            -out "$PSScriptRoot/../test.img"`
+#            -f flat
+
+Ata
