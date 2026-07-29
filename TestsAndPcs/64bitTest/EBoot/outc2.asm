@@ -69,13 +69,13 @@ kernelEntry:
    bl r0
    add sp, sp, 8
    push lnk
-while_4121:
+while_6998:
    mov r0, 1
    mov r1, 1
    cmp r2, r0, r1
-   cmp r2, r2, 0 jifeq end_152
-   jmp while_4121
-end_152:
+   cmp r2, r2, 0 jifeq end_249
+   jmp while_6998
+end_249:
    pop lnk
 kernelEntry__stdend:
    mov r4, 8

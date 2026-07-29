@@ -493,6 +493,9 @@ function AssembleLineWithoutContext(line, ctx2, len = null) {
       } else if (a.t === "n") {
         b[0] = 2;
         b[1] = a.n;
+      } else if (a.t === "a") {
+        b[0] = 2;
+        b[1] = a.a;
       }
     };
     x(expr1, expr1n);

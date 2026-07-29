@@ -504,6 +504,7 @@ export function AssembleLineWithoutContext(line, ctx, len=null) {
       if (a.t === 's') { b[0] = 0; b[1] = a.s; }
       else if (a.t === 'i') { b[0] = 1; b[1] = a.i; }
       else if (a.t === 'n') { b[0] = 2; b[1] = a.n; }
+      else if (a.t === 'a') { b[0] = 2; b[1] = a.a; }
     }
     x(expr1, expr1n);
     x(expr2, expr2n);
