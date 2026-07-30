@@ -25,6 +25,7 @@
 _fdhdr: dword   start
 
     org64
+    .pic     start
     PENCOLOR equ 1B000h
     PENX     equ 1B001h
     PENY     equ 1B002h
@@ -37,25 +38,22 @@ _fdhdr: dword   start
     ; entrada de start para el
     ; programa de el firmware
 start:
-    li32    sp, TOS ; configurar stack
+    laddr   sp, TOS ; configurar stack
     cmp     r0, 0, 0
 
     push    0           ; posicion X
     push    0           ; posicion Y
     push    50          ; half color
     push    255         ; ligth
+    push    255         ; saturation
     bl      putpixel    ; funcion de poner pixel
     add     sp, sp, 40  ; limpiar stack
 
-    li32    r1, img     ; verificar
+    laddr   r1, img     ; verificar
     mov     r2, IMG_ROWS
     mov     r3, POSY    ; contador
 
 drawloop:
-    push    r1          ; guardar
-    push    r2          ; guardar r2
-
-
     mov     r4, POSX    ; mover
 drawrowloop:
     push    r0
@@ -90,8 +88,6 @@ drawrowloop:
     jmp     drawrowloop
 drawrowloopnext:
 
-    pop     r2          ; recuperar r2
-    pop     r1          ; recuperar
     add     r1, r1, (IMG_COLS*3)   ; añadir
     dec     r2          ; decrementar
     inc     r3          ; incrementar

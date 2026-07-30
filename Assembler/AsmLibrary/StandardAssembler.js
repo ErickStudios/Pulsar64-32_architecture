@@ -418,6 +418,9 @@ export function AssembleLineWithoutContext(line, ctx, len=null) {
     if (f3 === 'LNK')return 10;
     if (f3 === 'BP') return 11;
     if (f3 === 'IP') return 12;
+    if (f3 === 'R7') return 13;
+    if (f3 === 'R8') return 14;
+    if (f3 === 'R9') return 15;
 
     return 0;
   }
@@ -455,7 +458,7 @@ export function AssembleLineWithoutContext(line, ctx, len=null) {
     let expr = parse64bitExpr();
     if (expr.t === 'a') {
       result.push(...AssembleLineWithoutContext(
-        `laddr lnk, ${expr.a} gb ${flag.toString()} lnk`, ctx, len
+        `li64 lnk, ${expr.a} gb ${flag.toString()} lnk`, ctx, len
       ));
     }
     else {
@@ -736,8 +739,7 @@ export function AssembleLineWithoutContext(line, ctx, len=null) {
 
       result.push(...AssembleLineWithoutContext(`
           push bp
-          mov bp, sp
-          add bp, bp, 8
+          add bp, sp, 8
           add bp, bp, ${psize.toString()}
           push lnk
         `, ctx, len));
@@ -872,6 +874,11 @@ export function AssembleLineWithoutContext(line, ctx, len=null) {
     else if (ctx.in64 && peek7() === 'JITRUE')parseJmpIfFlag64(3);
     else if (ctx.in64 && peek7() === 'JMP')   parseJmpIfFlag64(3);
     else if (ctx.in64 && peek7() === 'BL')    parseJmpIfFlag64(4);
+    else if (ctx.in64 && peek7() === 'JL')    parseJmpIfFlag64(1);
+    else if (ctx.in64 && peek7() === 'JG')    parseJmpIfFlag64(2);
+    else if (ctx.in64 && peek7() === 'JZ')    parseJmpIfFlag64(0);
+    else if (ctx.in64 && peek7() === 'JE')    parseJmpIfFlag64(0);
+
     else if (ctx.in64 && peek7() === 'GB')    { 
       consume();
       let flag = peek().value;
@@ -1127,7 +1134,7 @@ export function AssembleLineWithoutContext(line, ctx, len=null) {
     }
     else if (peek7() === 'RESERVE') {
       consume();
-      let a = consume().value;
+      let a = parseIdent(parsePrimary().value);
       result.push(...Array(a).fill(0))
     }
     else if (!ctx.in64 && peek7() === "JZ") parseJmpType(1);

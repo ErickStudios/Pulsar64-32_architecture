@@ -83,6 +83,8 @@ function UnsiA() {
             fileSystem.writeFileSync(outpudFile, Buffer.from(result));
             return
         }
+
+        console.log(resulta.context)
         
         fileSystem.writeFileSync(outpudFile, hex);
     }
