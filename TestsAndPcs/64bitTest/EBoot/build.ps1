@@ -31,10 +31,10 @@ function Ata {
             -f flat
 }
 
-#& $Launcher "$AsmTools/pulsarToolchain.js" `
-#        --asm                               `
-#            "$PSScriptRoot/outc2.asm"       `
-#            -out "$PSScriptRoot/../test.img"`
-#            -f flat
+& $Launcher "$AsmTools/pulsarToolchain.js" `
+        --asm                               `
+            "$PSScriptRoot/outc2.asm"       `
+            -out "$PSScriptRoot/../test.img"`
+            -f flat
 
 Ata

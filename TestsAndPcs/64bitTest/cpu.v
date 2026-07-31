@@ -362,7 +362,9 @@ reg [63:0]          i64CpuTbl,
                     x4, 
                     x5, 
                     x6, 
-                    x7;
+                    x7,
+                    x8,
+                    x9;
 
 // ============== 64 Bit Segment Register ==============
 localparam          SegmentRegistersCount = 7;
@@ -812,6 +814,9 @@ begin
     10:regVal = i64lnk;
     11:regVal = xbp;
     12:regVal = xpc;
+    13:regVal = x7;
+    14:regVal = x8;
+    15:regVal = x9;
     default: regVal = 0;
     endcase
 end endtask
@@ -831,6 +836,10 @@ begin
     9: x6   = regVal;
     10:i64lnk=regVal;
     11:xbp  = regVal;
+    13:x7   = regVal;
+    14:x8   = regVal;
+    15:x9   = regVal;
+
     default: ;
     endcase
 end
