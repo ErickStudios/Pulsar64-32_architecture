@@ -9,7 +9,7 @@ npx esbuild "$PSScriptRoot/Assembler/Pulsar3264toolchain.js" --bundle --platform
 node "$PSScriptRoot/Assembler/pulsarToolchain.js" `
     --asm                                        `
         "$PSScriptRoot/tests/scratch1.s"        `
-    -out "$PSScriptRoot/tests/scratch1.dec" -f decimal `
-    --asm                                        `
-        "$PSScriptRoot/tests/basic.s"           `
-    -out "$PSScriptRoot/tests/basic.dec" -f decimal
+    -out "$PSScriptRoot/tests/scratch1.dec" -f decimal
+#    --asm                                        `
+#        "$PSScriptRoot/tests/basic.s"           `
+#    -out "$PSScriptRoot/tests/basic.dec" -f decimal

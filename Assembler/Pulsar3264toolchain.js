@@ -75,7 +75,8 @@ function UnsiA() {
         let resulta = p3264asm.asm.assembleCode(asmGigantFile);
         let result = resulta.result;
         let hex = result.map(b => b.toString(16).padStart(2, '0')).join('\n');
-        
+        console.log(resulta.context)
+
         if (ctx["--asm"].format === 'decimal') {
             hex = result.map(b => b.toString()).join('\n');
         }
@@ -83,8 +84,6 @@ function UnsiA() {
             fileSystem.writeFileSync(outpudFile, Buffer.from(result));
             return
         }
-
-        console.log(resulta.context)
         
         fileSystem.writeFileSync(outpudFile, hex);
     }

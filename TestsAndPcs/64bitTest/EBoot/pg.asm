@@ -1,6 +1,10 @@
-    org64
+    org32
     dd start
 start:
+    dbgAc64
+    org64
+    mov         r0, 0
+    calc        r0
     jmp         bootstrap
 
     LETLEN      equ 10
@@ -11,6 +15,7 @@ start:
     TYNUM       equ 1
     TYOPR       equ 2
     TYUNKNOW    equ 3
+    TYEOF       equ 4
 
     align 20
 identifiers:
@@ -60,7 +65,7 @@ basicsp: word 0
 reserve 128 logicalstack:
 bufferline: reserve 128
 testcode:
-    db '1','2','3','+','0','0','4',0
+    db  '0','3','0','+','0','2','4',0
 tokens:     reserve (2*20)
 toki:       word 0
 
@@ -74,10 +79,9 @@ bootstrap:
 
     li32    r0, testcode
     bl      parse
-
-    mov     r1, [dword r0+(0*2)]
-    mov     r1, [dword r0+(1*2)]
-    mov     r1, [dword r0+(2*2)]
+    
+    ; preserve r0 for the param xD
+    bl      runTok
 
     hlt
 
@@ -115,6 +119,7 @@ push_new_token:
     add     r1, r1, 2
     mwr16   r2, r1
     pop     r2
+
     pop     r1
     pop     r0
     ret
@@ -165,7 +170,6 @@ isNumberPrefix:
     mov     r8, 0
     mov     r7, [byte r0]
     sub     r7, r7, '0'
-    mul     r8, r8, 10
     add     r8, r8, r7
     mov     r7, [byte r0+1]
     sub     r7, r7, '0'
@@ -173,6 +177,7 @@ isNumberPrefix:
     add     r8, r8, r7
     mov     r7, [byte r0+2]
     sub     r7, r7, '0'
+    mul     r8, r8, 10
     add     r8, r8, r7
     add     r0, r0, 2
     mov     r7, TYNUM
@@ -185,4 +190,80 @@ yeahIFindIt:
 endParse:
     pop     lnk
     li32    r0, tokens
+    push    lnk
+    mov     r7, TYEOF
+    mov     r8, 0
+    bl      push_new_token
+    pop     lnk
+    ret
+
+runTok:
+    push    lnk
+
+runTokLoop:
+    pop     lnk
+    push    lnk
+
+    bl      runPeek
+    cmp     r3, r1, TYEOF   ; verify file end
+    jz      end
+
+    cmp     r3, r1, TYNUM   ; number
+    jz      tryPlayNum
+
+    jmp     ignoreItsNotNum ; is not number
+
+tryPlayNum:
+    bl      runConsume      ; consume it
+    mov     r7, r2
+    bl      runPeek         ; peek
+    cmp     r1, r1, TYOPR
+    jz      isOpr
+    jmp     isNormalNum
+
+; ============ OPERATIONS TABLE ============
+oprTable:
+    dw      runMultiply
+    dw      runAddition
+    dw      0
+    dw      runSubstract
+    dw      0
+    dw      runDivition
+
+; ============ OPERATIONS FUNCS ============
+runMultiply:    mul r7, r7, r8 
+                ret
+runAddition:    add r7, r7, r8 
+                ret
+runSubstract:   sub r7, r7, r8 
+                ret  
+runDivition:    div r7, r7, r8 
+                ret
+isOpr:
+    bl      runConsume
+    mov     r9, r2
+    bl      runConsume
+    mov     r8, r2
+    li32    r4, oprTable
+    sub     r9, r9, '*'
+    mul     r9, r9, 2
+    add     r4, r4, r9
+    mov     r4, [word r4]
+    bl      r4
+isNormalNum:
+ignoreItsNotNum:
+    jmp     runTokLoop
+end:
+    pop     lnk
+    ret
+
+runPeek:
+    mov     r1, [byte r0+0] ; get type
+    mov     r2, [byte r0+1] ; get value
+    ret
+runConsume:
+    push    lnk
+    bl      runPeek         ; get token
+    add     r0, r0, 2       ; next token
+    pop     lnk
     ret

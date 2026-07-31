@@ -164,13 +164,13 @@ readDisk:
    mov r1, 20
    mwr8 r0, r1
    push lnk
-while_2227:
+while_2546:
    mov r0, 34
    sub r0, bp, r0
    lalts8 r0
    mov r1, 0
    cmp r2, r0, r1
-   cmp r2, r2, 0 jifeq end_784
+   cmp r2, r2, 0 jifeq end_9062
    mov r0, 34
    sub r0, bp, r0
    mov r1, 34
@@ -179,8 +179,8 @@ while_2227:
    mov r2, 1
    sub r1, r1, r2
    mwr8 r0, r1
-   jmp while_2227
-end_784:
+   jmp while_2546
+end_9062:
    pop lnk
    li16 r2, 672
    push r2
@@ -190,25 +190,25 @@ end_784:
    li64 r2, inPort
    bl r2
    add sp, sp, 16
-if_2507:
+if_2803:
    mov r0, 33
    sub r0, bp, r0
    lalts8 r0
    mov r1, 255
    cmp r2, r0, r1
-   cmp r2, r2, 0 jifeq endif_7570
+   cmp r2, r2, 0 jifeq endif_8088
    mov r0, 49
    sub r0, bp, r0
    mov r1, 0
    mwr16 r0, r1
    push lnk
-while_3056:
+while_9203:
    mov r0, 49
    sub r0, bp, r0
    lalts16 r0
    li16 r1, 512
    cmp r2, r0, r1
-   cmp r2, r2, 0 jifeq end_2880
+   cmp r2, r2, 0 jifeq end_7578
    mov r0, 46
    sub r0, bp, r0
    mov r1, 57
@@ -353,10 +353,10 @@ while_3056:
    mov r2, 1
    add r1, r1, r2
    mwr64 r0, r1
-   jmp while_3056
-end_2880:
+   jmp while_9203
+end_7578:
    pop lnk
-endif_7570:
+endif_8088:
 readDisk__stdend:
    mov r4, 41
    add sp, sp, r4
@@ -379,13 +379,13 @@ readSects:
    mov r1, [qword bp-8]
    mwr64 r0, r1
    push lnk
-while_3391:
+while_9247:
    mov r0, 56
    sub r0, bp, r0
    lalts64 r0
    mov r1, 0
    cmp r2, r0, r1
-   cmp r2, r2, 0 jifeq end_1442
+   cmp r2, r2, 0 jifeq end_6470
    mov r1, 48
    sub r1, bp, r1
    lalts64 r1
@@ -421,8 +421,8 @@ while_3391:
    li16 r2, 512
    add r1, r1, r2
    mwr64 r0, r1
-   jmp while_3391
-end_1442:
+   jmp while_9247
+end_6470:
    pop lnk
 readSects__stdend:
    mov r4, 32
@@ -452,14 +452,14 @@ puts:
    mov r1, [qword bp-0]
    mwr64 r0, r1
    push lnk
-while_1693:
+while_82:
    mov r0, 32
    sub r0, bp, r0
    deref r0
    lalts8 r0
    mov r1, 0
    cmp r2, r0, r1
-   cmp r2, r2, 0 jifeq end_3421
+   cmp r2, r2, 0 jifeq end_6134
    mov r1, 32
    sub r1, bp, r1
    deref r1
@@ -476,8 +476,8 @@ while_1693:
    mov r2, 1
    add r1, r1, r2
    mwr64 r0, r1
-   jmp while_1693
-end_3421:
+   jmp while_82
+end_6134:
    pop lnk
 puts__stdend:
    mov r4, 16
@@ -559,13 +559,13 @@ initdisplay:
    mov r1, 0
    mwr16 r0, r1
    push lnk
-while_2386:
+while_7478:
    mov r0, 22
    sub r0, bp, r0
    lalts16 r0
    li16 r1, 256
    cmp r2, r0, r1
-   cmp r2, r2, 0 jifeq end_2695
+   cmp r2, r2, 0 jifeq end_5312
    mov r0, 19
    sub r0, bp, r0
    mov r1, 22
@@ -691,8 +691,8 @@ while_2386:
    mov r2, 1
    add r1, r1, r2
    mwr16 r0, r1
-   jmp while_2386
-end_2695:
+   jmp while_7478
+end_5312:
    pop lnk
    mov r0, 0
    jmp initdisplay__stdend

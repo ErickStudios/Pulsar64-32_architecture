@@ -2234,13 +2234,13 @@ function UnsiA() {
     let resulta = LibraryAssembler.asm.assembleCode(asmGigantFile);
     let result = resulta.result;
     let hex = result.map((b) => b.toString(16).padStart(2, "0")).join("\n");
+    console.log(resulta.context);
     if (ctx["--asm"].format === "decimal") {
       hex = result.map((b) => b.toString()).join("\n");
     } else if (ctx["--asm"].format === "flat") {
       fileSystem.writeFileSync(outpudFile, Buffer.from(result));
       return;
     }
-    console.log(resulta.context);
     fileSystem.writeFileSync(outpudFile, hex);
   }
 }
