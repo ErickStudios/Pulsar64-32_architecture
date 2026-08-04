@@ -22,7 +22,9 @@ module cpu(
     // Cuando se escribio en una direccion
     output reg          mem_wrt_ene,
     output reg [31:0]   mem_wrt_addre,
+    output reg [31:0]	mem_buquasar64, // high part of 64 bit addr in 32
     output reg [7:0]    mem_wrt_vale,
+    output reg [63:0]   mem_wrt_vale_fx, // the complete data
     // Cuando ya leyo/escribio desde fuera
     output reg          mem_wrt_ack,
     output reg          mem_rdr_ack,
@@ -445,6 +447,8 @@ task ex_sdx; begin
     end 
     if (!quiet) $write(" SDX %s %0d\n", castToDebug(mode[3:0]), a);
 
+	mem_wrt_vale_fx = 0;
+	mem_wrt_vale_fx[31:0] = a;
     for (i = 0; i < OprOperationBytes; i = i + 1) begin
         write_mem_byte(currentPtrAddrs + i, (a >> (8 * (OprOperationBytes - 1 - i))) & 8'hFF);
     end
@@ -1122,6 +1126,8 @@ always @(posedge clk) begin
                             1: i64temp = inms64[i64bytes[3][3:0]];
                         endcase
                         if (!quiet) $display("MEM WRT AT %0d STEPS %0d DATA %0d", i64memre ,i64bysiz, i64temp);
+                        mem_wrt_vale_fx = i64temp;
+                        mem_buquasar64 = i64memre[63:32];
                         for (i = 0; i < i64bysiz; i = i + 1) begin
                             WriteMem64(i64memre + i, (i64temp >> (8 * (i64bysiz - 1 - i))) & 8'hFF);
                         end
