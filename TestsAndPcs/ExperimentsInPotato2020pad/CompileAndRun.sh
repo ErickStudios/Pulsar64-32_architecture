@@ -8,10 +8,15 @@ cp "$TOOLS_PATH/../CpuSource/BuildCpu/PackedCpu.v" "$SCRIPT_DIR/PCCore.v"
 
 $Launch $Tool2In1 --asm    \
         "$SCRIPT_DIR/BasicContinuation.s" \
-        -out "$SCRIPT_DIR/FirmwareHex.hex" -f hex
+        -out "$SCRIPT_DIR/FirmwareHex.hex" -f hex \
+        --asm				\
+        "$SCRIPT_DIR/BasicContinuation.s" \
+        -out "$SCRIPT_DIR/FirmwareHex.dec" -f decimal
+
+cp FirmwareHex.dec ~/storage/downloads/FBasic.dec
 echo "DIR: $SCRIPT_DIR"
 echo "Tool: $Tool2In1"
 echo "Node: $Launch"
 
-iverilog -o "$SCRIPT_DIR/machine" "$SCRIPT_DIR/PCCore.v" "$SCRIPT_DIR/machineCfg.v"
-vvp "$SCRIPT_DIR/machine"
+#iverilog -o "$SCRIPT_DIR/machine" "$SCRIPT_DIR/PCCore.v" "$SCRIPT_DIR/machineCfg.v"
+#vvp "$SCRIPT_DIR/machine"

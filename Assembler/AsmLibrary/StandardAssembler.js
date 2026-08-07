@@ -33,7 +33,12 @@ export function tokenize(code) {
         value += code[i++];
       }
       i++;
-      tokens.push({ type: "number", value: value.charCodeAt(0) });
+      for (let a = 0; a < value.length; a++) {
+      	tokens.push({ type: "number", value: value.charCodeAt(a) });
+      	if (a !== (value.length - 1)) {
+      		tokens.push({ type: "symbol", value: ',' });
+      	}
+      }
       continue;
     }
     if (isLetter(c)) {
