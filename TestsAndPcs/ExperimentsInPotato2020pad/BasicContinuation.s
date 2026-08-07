@@ -1,7 +1,7 @@
     org32
     dd start
 start:
-    dbgAc64
+    ;dbgAc64
     org64
     mov         r0, 0
     calc        r0
@@ -42,15 +42,15 @@ symbols:
     db          0
 
 align 20 print_ident: 
-    db 5,'p','r','i','n','t'
+    db 5,'print'
 align 20 input_ident: 
-    db 5,'i','n','p','u','t'
+    db 5,'input'
 align 20 goto_ident: 
-    db 4,'g','o','t','o'
+    db 4,'goto'
 align 20 gosub_ident: 
-    db 5,'g','o','s','u','b'
+    db 5,'gosub'
 align 20 return_ident: 
-    db 6,'r','e','t','u','r','n'
+    db 6,'return'
 
     align 20
 vars:
@@ -65,7 +65,7 @@ basicsp: word 0
 reserve 128 logicalstack:
 bufferline: reserve 128
 testcode:
-    db  'p','r','i','n','t','0','3','0','+','0','2','4',0
+    db  'print 030 + 024',0
 tokens:     reserve (2*20)
 
 strtemp: db  0          ; count
@@ -81,10 +81,27 @@ bootstrap:
     li32    r0, retTOS
     bl      config_sp
 
-    ; parse the code
-    li32    r0, testcode
-    bl      parse
-    
+loopKy:
+	li32	r0, testcode
+	mov		r1, 0
+waitKey:
+	li64    r2, 10010h
+	mov     r3, [byte r2]
+	cmp    	r4, r3, 0
+	jz 		waitKey
+	mov		r4, 0
+	mov		r4, 0
+	mwr8	r2, r4
+	add 	r5, r0, r1
+	mwr8 	r5, r3
+	inc		r1
+	cmp		r4, r3, 0Ah
+	jz 		parseLn
+	jmp		waitKey
+
+parseLn:
+	mwr8	r5, r4
+	bl  	parse
     ; preserve r0 for the param xD
     bl      runTok
 
@@ -171,6 +188,9 @@ loopp:
     mov     r1, [byte r0]   ; character
     cmp     r4, r1, 0       ; end of file
     jz      endParse
+
+    cmp		r4, r1, ' '
+    jz		skipSpace
 
 tryParseSymbolStart:
     add     r2, 0, (symbols/20) ; little trap
@@ -269,6 +289,7 @@ iGiveUpItIsNotIdentifier:
     hlt                         ; is nothing bye
 yeahIFindIt:
     bl      push_new_token      ; push token
+skipSpace:
     inc     r0                  ; inc char index
     jmp     loopp               ; next entry
 
@@ -398,7 +419,7 @@ digitpnumll:
     mul     r4, r4, 10
    	sub     r6, r6, r4
    	add     r6, r6, '0'
-   	li32    r8, 10000h
+   	li64    r8, 10000h
    	mwr8 	r8, r6
     cmp     r3, r2, 0
     dec     r2
@@ -417,3 +438,5 @@ runConsume:
     add     r0, r0, 2       ; next token
     pop     lnk
     ret
+
+align 10000h reserve 32
